@@ -6,8 +6,8 @@ with your approval.
 
 | Phase | Name | Status |
 |---|---|---|
-| 0 | Design document | **In review** |
-| 1 | Headless Minds Engine | Not started |
+| 0 | Design document | Approved |
+| 1 | Headless Minds Engine | **In review** (4/5 exit criteria; see reports/phase-1-report.md) |
 | 2 | Full evolutionary arc (headless) | Not started |
 | 3 | Civilization (headless) | Not started |
 | 4 | Renderer and assets | Not started |

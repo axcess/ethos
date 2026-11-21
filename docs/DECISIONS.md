@@ -192,3 +192,22 @@ Status: **Accepted** (approved by you), **Proposed** (my call, awaiting review),
 ### D-036 · Thought logs: full for a tracked sample + notables, ring buffers for everyone
 **Status:** Proposed
 **Decision:** Every mind keeps its last 64 meaningful thoughts; 12 tracked individuals and anyone notable are logged in full to `thoughts.txt`.
+
+### D-037 · Founding population is 80 in four bands of 20
+**Status:** Proposed (OQ-14, your default)
+**Decision:** Start with 80 founders (20 per band, close to real foraging-band sizes), food stocks near equilibrium (algae 35%, shellfish 45% of capacity), and conception only when the household has food stored.
+**Why:** 120 founders exceeded what the starting map can feed, so every tank crashed (median 126 → 49) in its first cycles. That was an artefact of the starting conditions, not tank dynamics. Now: 83 → ~96 → settles near 75, 0% extinction by cycle 30.
+
+### D-038 · Algae gardens require lamp-watching and a camp of 6
+**Status:** Proposed (OQ-15, your default)
+**Why:** Cultivation was reachable from nothing and caused very early booms. Now it needs a sense of the seasons first.
+
+### D-039 · Leadership has real effects, through prestige
+**Status:** Proposed (OQ-16, your default)
+**Decision:** Each mind tracks its own *prestige* (others accepting its proposals, following it, learning from it, its hunts and gulper kills; it fades). Minds with high prestige punish thieves who didn't rob them, redistribute food and organise hunts more. Followers favour requests from someone they believe leads and copy what respected people do (prestige-biased imitation, a new learning channel). Followers of a dead leader become restless.
+**Result:** losing the most respected person now costs a tank about 11 people, more starvation, fewer inventions and more theft. Before, it had no effect.
+
+### D-040 · Norms: witnessing is first-hand; victims learn; victims react on the spot
+**Status:** Proposed
+**Decision:** Seeing a thief punished is filed as one's own experience (not hearsay); being robbed teaches that robbing is wrong; a victim who catches a thief is interrupted and decides immediately whether to punish. Norm beliefs fade slowly.
+**Result:** an anti-theft norm takes hold in 56% of tanks (was 4–12%), with about 11 punishments per tank and no feud spiral.

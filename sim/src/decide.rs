@@ -945,6 +945,7 @@ impl Sim {
                     let mi = m as usize;
                     let share = if m == leader { lead_share } else { rest };
                     self.people[mi].carried += share;
+                    self.counters.food_hunted += share;
                     self.people[mi].skill_hunt = (self.people[mi].skill_hunt + 0.04).min(1.0);
                     self.use_know(mi, n::SPEAR);
                     self.use_know(mi, n::LURE);
@@ -1154,6 +1155,7 @@ impl Sim {
                     p.stash -= b;
                 }
                 p.energy = (p.energy + (a + b) * value).min(1.0);
+                self.counters.food_eaten += a + b;
                 if value > 0.25 {
                     self.use_know(i, n::VENT_COOK);
                 }
@@ -1212,6 +1214,7 @@ impl Sim {
                     p.needs[need::CARRY] += 0.5;
                 }
                 p.carried += got.min(room);
+                self.counters.food_gathered += got.min(room);
                 p.skill_forage = (p.skill_forage + 0.005).min(1.0);
                 if got < 1.0 {
                     p.needs[need::HUNGER] += 0.2;

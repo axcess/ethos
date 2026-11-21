@@ -1,0 +1,5 @@
+# TEST ONLY: caps population so 200+ cycle language/culture tests finish quickly.
+# The cap stops conception at 300 people; it is not a broadcast setting.
+name = "longrun-test"
+[people]
+max_population = 300

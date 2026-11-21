@@ -1123,6 +1123,7 @@ impl Sim {
                 }
                 let spoiled = p.stash * rate;
                 p.stash -= spoiled;
+                self.counters.food_spoiled += spoiled;
                 if spoiled > 0.25 {
                     p.needs[need::SPOILED] += spoiled;
                 }
@@ -1345,6 +1346,7 @@ impl Sim {
             pp.stash -= from_stash;
             pp.carried -= units - from_stash;
             child.energy = (child.energy + units * 0.25).min(1.0);
+            self.counters.food_eaten += units;
             pp.mind.drives[drv::CARE] = (pp.mind.drives[drv::CARE] + 0.05).min(0.9);
             need_units -= units;
         }

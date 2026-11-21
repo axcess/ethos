@@ -144,8 +144,8 @@ fn cmd_run(args: &Args) {
             last_report = sim.cycle();
             if let Some(s) = sim.stats.last() {
                 eprintln!(
-                    "cycle {:>3} (Chicago {}) pop {:>4} camps {:>2} groups {:>2} known {:>2} lost {:>2} langs {} roles {:>2} change {:.2}",
-                    s.cycle, s.real_year, s.pop, s.camps, s.groups, s.known_nodes, s.knowledge_lost_total, s.languages, s.roles_distinct, s.change_index
+                    "cycle {:>3} (Chicago {}) pop {:>4} camps {:>2} groups {:>2} known {:>2} lost {:>2} langs {} intel {:.2} roles {:>2} change {:.2}",
+                    s.cycle, s.real_year, s.pop, s.camps, s.groups, s.known_nodes, s.knowledge_lost_total, s.languages, s.min_intelligibility, s.roles_distinct, s.change_index
                 );
             }
         }

@@ -171,10 +171,10 @@ impl Default for PredCfg {
     fn default() -> Self {
         PredCfg {
             initial: 4,
-            max: 8,
+            max: 6,
             sense: 36.0,
             speed: 0.9,
-            kill_chance: 0.18,
+            kill_chance: 0.12,
             lifespan_cycles: 10.0,
             energy_per_day: 0.08,
             breed_energy: 2.6,
@@ -271,7 +271,7 @@ impl Default for LanguageCfg {
             innovation_use: 0.15,
             adopt_score: 0.4,
             reinforce: 0.12,
-            synonym_rate: 0.006,
+            synonym_rate: 0.0006,
         }
     }
 }

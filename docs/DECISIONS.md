@@ -127,3 +127,68 @@ Status: **Accepted** (approved by you), **Proposed** (my call, awaiting review),
 **Status:** Proposed
 **Decision:** News packages re-render clips from stored state diffs + camera directives.
 **Why:** Orders of magnitude smaller than video; any angle can be re-shot.
+
+---
+
+## Phase 1 decisions (2026-11-21)
+
+### D-024 · Phase 1 world is a 2-D top-down grid
+**Status:** Proposed
+**Decision:** 64×32 cells (8 units each) grouped into 32 named "places"; depth, habitat, materials, regrowing algae/shellfish, vents, a rock ridge with two passes. The 3-D field model (DESIGN §3.2) arrives in Phase 2.
+**Why:** Phase 1 is about minds; a 2-D map makes geography matter (travel, separation, local depletion) at a fraction of the cost.
+**Rejected:** Building the full 3-D fields first (delays the minds work; nothing in Phase 1 needs vertical structure).
+
+### D-025 · One thread per tank; parallelism across tanks
+**Status:** Proposed
+**Decision:** A tank runs single-threaded; `tank batch` runs tanks in parallel.
+**Why:** Simplest way to guarantee determinism; batch testing is where throughput matters now. Revisit in Phase 2 if one tank needs more than one core (region-parallel design in DESIGN §18.4 still applies).
+
+### D-026 · Climate: shuffled multi-year blocks of real Chicago years
+**Status:** Accepted (implemented as designed)
+**Decision:** NOAA GHCN-Daily Midway (+ O'Hare fill), 1929–2025, bundled as CSV with a recorded checksum. 365 real days → 48 tank days; extremes preserved.
+
+### D-027 · Language stability: hearers supply missing words; entrenched words resist replacement
+**Status:** Proposed
+**Decision:** A speaker with no word for a concept adopts the hearer's (coins only if neither has one). New synonyms are coined at 0.06% of utterances, scaled down for entrenched words. Children mishear 2% of new words. Sound laws spread word by word.
+**Why:** Without these, vocabularies churned so fast that a single camp had six words for "food". Real basic vocabulary is stable within a community and drifts between separated ones.
+
+### D-028 · Intelligibility = recognition; languages = average-linkage clusters
+**Status:** Proposed
+**Decision:** Community B understands A to the extent that B's members recognise A's usual words (any form they know for the concept, within one sound), counting only concepts B has a word for. Communities join a language when their average intelligibility with it is ≥ 0.5.
+**Why:** Earlier measures (modal-word comparison, complete linkage) counted vocabulary gaps and within-group noise as separate languages (one tank reported 32 languages).
+
+### D-029 · Use it or lose it
+**Status:** Proposed
+**Decision:** Every discovery a mind holds fades daily unless practised (tools faster than practices/beliefs); below a threshold it is forgotten. Practising a tool also refreshes its prerequisites.
+**Why:** Without forgetting, knowledge once learned spread to everyone forever and was never lost. Now 96–100% of tanks lose something and ~90% rediscover something: dark ages and recoveries.
+
+### D-030 · Hearsay never outruns the teller; beliefs fade; experience disconfirms
+**Status:** Proposed
+**Decision:** A belief received by gossip is capped at 85% of the teller's confidence; unreinforced beliefs fade (hearsay and superstitions faster); successfully using a "cursed" material weakens the curse; kindness weakens a thief rumour.
+**Why:** Superstitions and accusations saturated at 100% across whole populations, which also shut down invention (no one would touch "cursed" materials).
+
+### D-031 · Gulpers prefer drifters; take the isolated and the benighted
+**Status:** Proposed
+**Decision:** Hungry gulpers usually hunt drifter herds; they target people who are alone (or anyone at night), are deterred by crowds and walls, breed slowly, and drift back in from the wider tank when scarce. A lone person rarely kills one without a spear.
+**Why:** Tuning swung between "people mob every gulper to death" and "gulpers eat everyone in one cycle". Current: gulpers cause ~30% of deaths.
+
+### D-032 · Infants are fed by parents first, then by kin and generous camp-mates
+**Status:** Proposed
+**Why:** Initially ~75% of births died of starvation because parents gave their stash away. Parents with dependents now hold back from non-kin.
+
+### D-033 · A habit term in utility
+**Status:** Proposed
+**Decision:** Activities a person practises often get a small utility bonus (excluding eating, sleeping, storing).
+**Why:** Lets specialists emerge from practice rather than assignment.
+
+### D-034 · Scenarios are test inputs only
+**Status:** Proposed
+**Decision:** `famine`, `predator_surge`, `stranger`, `leader_death`, `windfall`, `plague`, `harsh_winter`, `drought_year` exist only for headless experiments; broadcast tanks never run injections.
+
+### D-035 · Roles: "lawgiver" is separate from "prophet"
+**Status:** Proposed
+**Decision:** A person whose norm (e.g. "stealing is forbidden") spreads to ≥ 6 people is a lawgiver; a person whose belief about the unseen (curses, ancestors, the Lamp) spreads is a prophet.
+
+### D-036 · Thought logs: full for a tracked sample + notables, ring buffers for everyone
+**Status:** Proposed
+**Decision:** Every mind keeps its last 64 meaningful thoughts; 12 tracked individuals and anyone notable are logged in full to `thoughts.txt`.

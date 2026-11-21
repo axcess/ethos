@@ -1,0 +1,14 @@
+# A kinder tank: more food, fewer gulpers, milder disease. Only overrides are listed.
+name = "gentle"
+[world]
+algae_regrow = 0.18
+herds = 8
+[predators]
+initial = 2
+max = 4
+kill_chance = 0.08
+[disease]
+spontaneous_per_cycle = 0.08
+mortality_per_day = 0.008
+[climate]
+amplitude = 0.7

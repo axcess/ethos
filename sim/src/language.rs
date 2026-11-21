@@ -173,6 +173,15 @@ impl Phonology {
     }
 
     pub fn coin(&self, r: &mut Rng) -> Form {
+        let mut w = self.coin_raw(r);
+        w.truncate(8);
+        if !w.iter().any(|p| is_vowel(*p)) {
+            w.push(self.vowels[0]);
+        }
+        w
+    }
+
+    fn coin_raw(&self, r: &mut Rng) -> Form {
         let nsyl = r.weighted(&self.lengths).unwrap_or(1) + 1;
         let mut w = Vec::new();
         let front_word = r.chance(0.5);
@@ -291,8 +300,9 @@ impl Lexicon {
     pub fn len(&self) -> usize {
         self.entries.len()
     }
-    /// Keep the lexicon bounded: forget the weakest person-names first, then weakest words.
-    pub fn prune(&mut self, cap: usize, alive: impl Fn(u32) -> bool) {
+    /// Keep the lexicon bounded. Forget, in order: names of the dead, names of people one
+    /// doesn't know, other names, camp and invention words; basic vocabulary goes last.
+    pub fn prune(&mut self, cap: usize, alive: impl Fn(u32) -> bool, known: impl Fn(u32) -> bool) {
         if self.entries.len() <= cap {
             return;
         }
@@ -300,19 +310,27 @@ impl Lexicon {
             Concept::Person(p) => alive(*p),
             _ => true,
         });
-        while self.entries.len() > cap {
-            let weakest = self
-                .entries
-                .iter()
-                .map(|(c, v)| (*c, v.iter().map(|x| x.1).fold(0.0f32, f32::max)))
-                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap().then(a.0.cmp(&b.0)))
-                .map(|x| x.0);
-            match weakest {
-                Some(c) => {
-                    self.entries.remove(&c);
-                }
-                None => break,
-            }
+        if self.entries.len() <= cap {
+            return;
+        }
+        let mut order: Vec<(u8, f32, Concept)> = self
+            .entries
+            .iter()
+            .map(|(c, v)| {
+                let tier = match c {
+                    Concept::Person(p) if !known(*p) => 0,
+                    Concept::Person(_) => 1,
+                    Concept::Camp(_) | Concept::Node(_) => 2,
+                    Concept::Place(_) => 3,
+                    Concept::Kind(_) => 4,
+                };
+                (tier, v.iter().map(|x| x.1).fold(0.0f32, f32::max), *c)
+            })
+            .collect();
+        order.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.partial_cmp(&b.1).unwrap()).then(a.2.cmp(&b.2)));
+        let excess = self.entries.len() - cap;
+        for (_, _, c) in order.into_iter().take(excess) {
+            self.entries.remove(&c);
         }
     }
 }

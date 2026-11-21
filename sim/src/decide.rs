@@ -24,7 +24,7 @@ struct Cand {
 
 fn c(act: Act, u: f32, w: &[(u8, f32)]) -> Cand {
     let mut why = [(NONE, 0.0); 3];
-    let mut v: Vec<(u8, f32)> = w.iter().copied().filter(|x| x.1 > 0.05).collect();
+    let mut v: Vec<(u8, f32)> = w.iter().copied().map(|x| (x.0, x.1.min(1.0))).filter(|x| x.1 > 0.05).collect();
     v.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap().then(a.0.cmp(&b.0)));
     for (k, x) in v.into_iter().take(3).enumerate() {
         why[k] = x;
@@ -247,7 +247,7 @@ impl Sim {
         // Sleep / rest
         {
             let rest = m.drives[drv::REST];
-            let u = if night { 0.5 + rest * 0.6 } else { rest * 0.2 - 0.2 } - hunger * 0.35 + exp_cold * 0.1;
+            let u = if night { 0.45 + rest * 0.9 } else { rest * 0.3 - 0.25 } - hunger * 0.35 + exp_cold * 0.1;
             cands.push(c(Act::Sleep, u, &[(why::NIGHT, if night { 0.6 } else { 0.0 }), (why::REST, rest)]));
             if p.health < 0.6 {
                 cands.push(c(Act::Rest, (1.0 - p.health) * 0.8 - hunger * 0.3, &[(why::REST, 1.0 - p.health)]));
@@ -267,7 +267,7 @@ impl Sim {
             let q = &self.people[o as usize];
             let mo = m.model(o);
             let (aff, trust, grudge, k) = mo.map_or((0.0, 0.2, 0.0, kin::NONE), |mm| (mm.affinity, mm.trust, mm.grudge, mm.kin));
-            let stranger = q.culture != p.culture || q.stranger;
+            let stranger = (q.culture != p.culture || q.stranger) && mo.map_or(true, |mm| mm.affinity < 0.3 && mm.kin == kin::NONE);
             if stranger {
                 saw_list.push((saw::STRANGER, o));
             }
@@ -316,7 +316,7 @@ impl Sim {
                 }
             }
             let q_food = q.carried + if q.home == p.home && q.home.is_some() { q.stash } else { 0.0 };
-            if q_food > 1.5 {
+            if q_food > 1.5 && q.energy > 0.45 {
                 let (acc, refu) = mo.map_or((0, 0), |mm| (mm.accepts, mm.refusals));
                 let generosity = (acc as f32 + 1.0) / (acc as f32 + refu as f32 + 2.0);
                 let w = (trust + if k != kin::NONE { 0.5 } else { 0.0 } + aff * 0.3) * generosity * 1.6;
@@ -381,7 +381,7 @@ impl Sim {
             if adult {
                 let them = &self.people[o as usize];
                 let fear_them = m.model(o).map_or(0.0, |mm| mm.fear);
-                let u = anger * 0.6 + w * 0.5 + tr[3] * 0.3 + tr[5] * norm_steal * 0.2 - them.genome.dominance * 0.25 - fear * 0.2 - fear_them * 0.4 - tr[4] * 0.2 - 0.55;
+                let u = anger * 0.6 + w * 0.5 + tr[3] * 0.3 + tr[5] * norm_steal * 0.2 - them.genome.dominance * 0.25 - fear * 0.2 - fear_them * 0.4 - tr[4] * 0.2 - 0.3;
                 let mut cc = c(Act::Punish { who: o }, u, &[(why::GRUDGE, w), (why::ANGER, anger), (why::NORM, norm_steal)]);
                 cc.saw = (saw::THIEF, o);
                 cands.push(cc);
@@ -743,6 +743,9 @@ impl Sim {
                 if q.knows(n::SHARING) {
                     u += 0.3;
                 }
+                if hunger_j > 0.65 && have < 4.0 && k != kin::CHILD {
+                    u -= 1.2;
+                }
                 why_v = [(why::TRUST, trust), (why::KIN, if k != kin::NONE { 0.5 } else { 0.0 }), (why::HUNGER, -hunger_j)];
             }
             Req::Hunt => {
@@ -793,6 +796,9 @@ impl Sim {
                 pi.mind.model_mut(j as u32, tick, cap).ledger -= give;
                 pi.mind.model_mut(j as u32, tick, cap).affinity += 0.08;
                 pi.mind.feel(emo::TRUST, 0.3);
+                if let Some(b) = pi.mind.beliefs.iter_mut().find(|b| b.subject == Concept::Person(j as u32) && b.rel == Rel::Thief) {
+                    b.conf -= 0.15;
+                }
                 self.counters.asks_granted += 1;
                 self.episode(i, EpKind::WasShared, Some(j as u32), 0.6, 0.35);
             }
@@ -1176,6 +1182,10 @@ impl Sim {
                 for node in [n::NET, n::SCRAPER, n::BASKET] {
                     self.use_know(i, node);
                 }
+                if got > 1.0 {
+                    let pm = self.world.places[place as usize].mats;
+                    self.disconfirm_curse(i, pm);
+                }
                 if night {
                     self.use_know(i, n::GLOWLAMP);
                 }
@@ -1337,23 +1347,35 @@ impl Sim {
         let form = match sp.mind.lex.best(&topic) {
             Some(f) => f.clone(),
             None => {
+                // lacking a word, the speaker points and the hearer supplies theirs
+                if let Some(hf) = hp.mind.lex.best(&topic).cloned() {
+                    let learn = lc.adopt_score * (0.5 + sp.genome.learning);
+                    sp.mind.lex.adopt(topic, hf, learn.min(0.9));
+                    sp.mind.comm_try += 1;
+                    hp.mind.comm_try += 1;
+                    sp.mind.comm_ok += 1;
+                    hp.mind.comm_ok += 1;
+                    return true;
+                }
                 let w = if topic == Concept::Person(sp.id) { sp.name.clone() } else { sp.phon.coin(&mut sp.rng) };
                 sp.mind.lex.adopt(topic, w.clone(), 0.5);
                 w
             }
         };
         let mut form = form;
-        if !matches!(topic, Concept::Person(_) | Concept::Camp(_)) && sp.rng.chance(lc.synonym_rate) {
-            let fresh = if sp.rng.chance(0.5) {
-                // compound: reuse part of another word
+        let entrenched = sp.mind.lex.entries.get(&topic).map_or(0.0, |v| v.iter().map(|x| x.1).fold(0.0, f32::max));
+        if !matches!(topic, Concept::Person(_) | Concept::Camp(_)) && sp.rng.chance(lc.synonym_rate * (1.15 - entrenched).max(0.05)) {
+            let mut fresh = if sp.rng.chance(0.5) && form.len() >= 3 {
+                // clipped compound: keep the start of the old word, add a fresh syllable
                 let mut f = form.clone();
-                f.truncate(2.max(f.len() / 2));
+                f.truncate(3);
                 let tail = sp.phon.coin(&mut sp.rng);
-                f.extend(tail.iter().take(3));
+                f.extend(tail.iter().take(2));
                 f
             } else {
                 sp.phon.coin(&mut sp.rng)
             };
+            fresh.truncate(7);
             let s0 = sp.mind.lex.entries.get(&topic).map_or(0.5, |v| v.iter().map(|x| x.1).fold(0.0, f32::max));
             sp.mind.lex.adopt(topic, fresh.clone(), (s0 + 0.05).min(1.0));
             form = fresh;
@@ -1380,7 +1402,7 @@ impl Sim {
             let close = hp.mind.lex.best(&topic).map_or(false, |b| edit_distance(b, &form) <= 1);
             let learn = lc.adopt_score * if h_child { 1.6 } else { 1.0 } * (0.5 + hp.genome.learning);
             let mut heard = form;
-            if h_child && hp.rng.chance(0.06) && heard.len() >= 2 {
+            if h_child && hp.rng.chance(0.02) && heard.len() >= 2 {
                 // a child mishears one sound, swapping it for a similar one it can make
                 let k = hp.rng.below(heard.len() as u32) as usize;
                 let old = heard[k];
@@ -1571,7 +1593,9 @@ impl Sim {
                         subject = o;
                     }
                 }
-                let newly = self.people[h].mind.believe(Concept::Person(subject), r, conf * w * 0.5, Some(sid), origin, tick, distort, bcap);
+                let cur = self.people[h].mind.belief(Concept::Person(subject), r);
+                let target = (conf * 0.85).min(cur + conf * w * 0.4);
+                let newly = target > cur && self.people[h].mind.believe(Concept::Person(subject), r, target - cur, Some(sid), origin, tick, distort, bcap);
                 let md = self.people[h].mind.model_mut(subject, tick, cap);
                 match r {
                     Rel::Thief => md.trust -= 0.1 * w,
@@ -1590,7 +1614,11 @@ impl Sim {
                 }
             }
             Topic::Belief(subj, r, conf, origin) => {
-                self.people[h].mind.believe(subj, r, conf * w * 0.5, Some(sid), origin, tick, false, bcap);
+                let cur = self.people[h].mind.belief(subj, r);
+                let target = (conf * 0.85).min(cur + conf * w * 0.4);
+                if target > cur {
+                    self.people[h].mind.believe(subj, r, target - cur, Some(sid), origin, tick, false, bcap);
+                }
             }
             Topic::Skill(node) => {
                 if self.people[h].rng.chance(0.15 * self.cfg.discovery.teach_fidelity) {
@@ -1790,7 +1818,7 @@ impl Sim {
         let allies = self.people.iter().filter(|q| q.alive && q.act == (Act::Defend { pred }) && q.id != i as u32).count() as f32;
         let spear = if self.people[i].knows(n::SPEAR) { 0.3 } else { 0.0 };
         self.use_know(i, n::SPEAR);
-        let p_kill = 0.015 + spear * 0.5 + allies.min(4.0) * 0.015 + self.people[i].genome.size * 0.01;
+        let p_kill = 0.008 + spear * 0.35 + allies.min(4.0) * 0.01 + self.people[i].genome.size * 0.006;
         if self.rng.chance(p_kill) {
             self.world.predators[k].alive = false;
             self.people[i].predators_killed += 1;
@@ -1897,7 +1925,7 @@ impl Sim {
                 .materials
                 .iter()
                 .copied()
-                .filter(|m| mats & m != 0 && p.mind.belief(Concept::Kind(mat_kind(*m)), Rel::Cursed) < 0.5)
+                .filter(|m| mats & m != 0 && p.mind.belief(Concept::Kind(mat_kind(*m)), Rel::Cursed) * (0.4 + p.mind.traits[5] + p.mind.emo[emo::FEAR]) < 0.6)
                 .collect();
             if !d.materials.is_empty() && avail.is_empty() {
                 continue;
@@ -1922,6 +1950,7 @@ impl Sim {
         self.people[i].mind.drives[drv::CURIOSITY] *= 0.7;
         if self.people[i].rng.chance(chance) {
             self.learn(i, node, material, KnowSource::Invented);
+            self.disconfirm_curse(i, material);
             let p = &mut self.people[i];
             p.inventions += 1;
             p.mind.drives[drv::STATUS] *= 0.3;

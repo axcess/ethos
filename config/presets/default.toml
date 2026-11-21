@@ -1,0 +1,3 @@
+# The default tank. Every value comes from sim/src/config.rs defaults; this file exists so
+# runs can name their preset explicitly.
+name = "default"

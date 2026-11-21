@@ -152,6 +152,8 @@ pub struct PersonOut {
     pub friends: Vec<String>,
     pub enemies: Vec<String>,
     pub lexicon_size: usize,
+    pub group: Option<u32>,
+    pub words: Vec<(String, String)>,
     pub life: Vec<String>,
     pub thoughts: Vec<String>,
 }
@@ -195,6 +197,11 @@ pub fn person_out(sim: &Sim, id: u32) -> PersonOut {
         friends: friends.into_iter().take(6).map(|f| f.1).collect(),
         enemies,
         lexicon_size: p.mind.lex.len(),
+        group: sim.obs.membership.get(&id).copied(),
+        words: [crate::concepts::Kind::Food, crate::concepts::Kind::Gulper, crate::concepts::Kind::Lamp, crate::concepts::Kind::Danger, crate::concepts::Kind::Water]
+            .iter()
+            .filter_map(|k| p.mind.lex.best(&Concept::Kind(*k)).map(|f| (k.gloss().to_lowercase(), crate::language::romanize(f))))
+            .collect(),
         life: p.life.iter().map(|l| format!("[{}] {}", when(sim, l.tick), l.text)).collect(),
         thoughts: p.thoughts.iter().rev().take(16).rev().map(|t| render_thought(sim, t)).collect(),
     }

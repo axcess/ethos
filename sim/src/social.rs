@@ -28,10 +28,11 @@ pub mod role {
     pub const PROVIDER: usize = 10;
     pub const PROPHET: usize = 11;
     pub const STORYTELLER: usize = 12;
-    pub const N: usize = 13;
+    pub const LAWGIVER: usize = 13;
+    pub const N: usize = 14;
     pub const NAMES: [&str; N] = [
         "gatherer", "hunter", "guard", "teacher", "healer", "builder", "inventor", "thief", "leader", "outcast",
-        "provider", "prophet", "storyteller",
+        "provider", "prophet", "storyteller", "lawgiver",
     ];
 }
 
@@ -209,7 +210,7 @@ fn entropy(v: &[f32]) -> f32 {
 }
 
 /// Roles as the observer sees them (bitmask over role::*).
-fn detect_roles(sim: &Sim, id: u32, respecters: u32, prophet: bool) -> u16 {
+fn detect_roles(sim: &Sim, id: u32, respecters: u32, prophet: bool, lawgiver: bool) -> u16 {
     let p = &sim.people[id as usize];
     let tot: f32 = p.activity.iter().sum::<f32>().max(1.0);
     let share = |k: usize| p.activity[k] / tot;
@@ -249,6 +250,9 @@ fn detect_roles(sim: &Sim, id: u32, respecters: u32, prophet: bool) -> u16 {
     }
     if prophet {
         r |= 1 << role::PROPHET;
+    }
+    if lawgiver {
+        r |= 1 << role::LAWGIVER;
     }
     // outcast: camp-mates distrust or resent them
     if let Some(h) = p.home {
@@ -379,10 +383,15 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
     }
     // prophets & spreading beliefs
     let mut prophets: BTreeSet<u32> = BTreeSet::new();
+    let mut lawgivers: BTreeSet<u32> = BTreeSet::new();
     let mut spread_events = Vec::new();
     for (&(origin, subj, rel), &cnt) in &origin_counts {
         if cnt >= 6 {
-            prophets.insert(origin);
+            if rel == Rel::Forbidden as u8 {
+                lawgivers.insert(origin);
+            } else if matches!(rel, x if x == Rel::Cursed as u8 || x == Rel::Watch as u8 || x == Rel::Governs as u8 || x == Rel::Sacred as u8) {
+                prophets.insert(origin);
+            }
             let key = fnv64(&[origin.to_le_bytes().as_slice(), subj.to_le_bytes().as_slice(), &[rel]].concat());
             if !sim.obs.spread_beliefs.contains(&key) {
                 sim.obs.spread_beliefs.push(key);
@@ -418,7 +427,7 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
     let mut role_churn = 0u32;
     let mut new_roles: Vec<(u32, u16)> = Vec::new();
     for &id in &adults {
-        let r = detect_roles(sim, id, *respecters.get(&id).unwrap_or(&0), prophets.contains(&id));
+        let r = detect_roles(sim, id, *respecters.get(&id).unwrap_or(&0), prophets.contains(&id), lawgivers.contains(&id));
         for k in 0..role::N {
             if r & (1 << k) != 0 {
                 role_counts[k] += 1;
@@ -435,11 +444,13 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
         let gained = *r & !p.roles;
         p.roles = *r;
         for k in 0..role::N {
-            if gained & (1 << k) != 0 && sim.obs.roles_ever & (1 << k) == 0 && k != role::GATHERER {
+            if gained & (1 << k) != 0 && sim.obs.roles_ever & (1 << k) == 0 {
                 sim.obs.roles_ever |= 1 << k;
-                first_roles.push((*id, k));
+                if k != role::GATHERER {
+                    first_roles.push((*id, k));
+                }
             }
-            if gained & (1 << k) != 0 && matches!(k, role::LEADER | role::HEALER | role::PROPHET | role::OUTCAST | role::TEACHER) {
+            if gained & (1 << k) != 0 && matches!(k, role::LEADER | role::HEALER | role::PROPHET | role::OUTCAST | role::TEACHER | role::LAWGIVER) {
                 let text = format!("became known as a {}", role::NAMES[k]);
                 p.life_note(tick, text);
             }
@@ -541,24 +552,34 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
         info.push(LanguageInfo { communities: vec![], speakers: members.len() as u32, shared_lexicon: shared, coherence, grammar_tier: tier, sample });
         modal.push(mm);
     }
-    // mutual intelligibility → languages (complete linkage: every pair inside a language must
-    // understand each other; a dialect chain whose ends cannot is more than one language)
+    // mutual intelligibility → languages (average linkage: a community belongs to a language
+    // if, on average, it understands that language's communities)
     let nc = modal.len();
     let mut intel = vec![vec![1.0f32; nc]; nc];
     let mut min_intel: f32 = 1.0;
-    for a in 0..nc {
-        for b in (a + 1)..nc {
-            let mut both = 0;
-            let mut same = 0;
-            for (c, fa) in &modal[a] {
-                if let Some(fb) = modal[b].get(c) {
-                    both += 1;
-                    if edit_distance(fa, fb) <= 1 {
-                        same += 1;
+    // how well do community b's speakers recognise community a's usual words (any form they
+    // know for the concept, within one sound)?
+    let understand = |a: usize, b: usize| -> f32 {
+        // only words the listener has *some* word for count: a gap in vocabulary is not a
+        // different language, a different word is
+        let members = &comms[b].1;
+        let mut ok = 0u32;
+        let mut n = 0u32;
+        for (c, fa) in &modal[a] {
+            for &m in members {
+                if let Some(v) = sim.people[m as usize].mind.lex.entries.get(c) {
+                    n += 1;
+                    if v.iter().any(|(f, _)| edit_distance(f, fa) <= 1) {
+                        ok += 1;
                     }
                 }
             }
-            let x = if both > 0 { same as f32 / both as f32 } else { 0.0 };
+        }
+        if n > 0 { ok as f32 / n as f32 } else { 0.0 }
+    };
+    for a in 0..nc {
+        for b in (a + 1)..nc {
+            let x = 0.5 * (understand(a, b) + understand(b, a));
             intel[a][b] = x;
             intel[b][a] = x;
             min_intel = min_intel.min(x);
@@ -568,7 +589,7 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
     order.sort_by(|a, b| info[*b].speakers.cmp(&info[*a].speakers).then(a.cmp(b)));
     let mut clusters: Vec<Vec<usize>> = Vec::new();
     for a in order {
-        match clusters.iter_mut().find(|cl| cl.iter().all(|&b| intel[a][b] >= 0.5)) {
+        match clusters.iter_mut().find(|cl| cl.iter().map(|&b| intel[a][b]).sum::<f32>() / cl.len() as f32 >= 0.5) {
             Some(cl) => cl.push(a),
             None => clusters.push(vec![a]),
         }
@@ -612,6 +633,7 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
             + p.predators_killed as f32 * 2.0
             + if r & (1 << role::LEADER) != 0 { 4.0 } else { 0.0 }
             + if r & (1 << role::PROPHET) != 0 { 4.0 } else { 0.0 }
+            + if r & (1 << role::LAWGIVER) != 0 { 3.0 } else { 0.0 }
             + if r & (1 << role::HEALER) != 0 { 1.5 } else { 0.0 }
             + kids * 0.3
             + *respecters.get(&id).unwrap_or(&0) as f32 * 0.3;

@@ -247,7 +247,12 @@ impl Sim {
                         p.mind.lex.adopt(*c, v[0].0.clone(), s);
                     }
                 }
-                p.name = self.proto_phon.coin(&mut p.rng);
+                p.name = loop {
+                    let w = self.proto_phon.coin(&mut p.rng);
+                    if w.len() >= 3 {
+                        break w;
+                    }
+                };
                 p.name_gloss = "founder".into();
                 self.people.push(p);
             }
@@ -597,8 +602,13 @@ impl Sim {
         let is_alive = |id: u32| people.get(id as usize).map_or(false, |p| p.alive);
         let mut prunes: Vec<(usize, Lexicon)> = Vec::new();
         for &id in &alive_people {
-            let mut lex = people[id as usize].mind.lex.clone();
-            lex.prune(self.cfg.mind.lexicon_cap, is_alive);
+            let p = &people[id as usize];
+            if p.mind.lex.len() <= self.cfg.mind.lexicon_cap {
+                continue;
+            }
+            let mut lex = p.mind.lex.clone();
+            let known = |q: u32| p.mind.model(q).is_some();
+            lex.prune(self.cfg.mind.lexicon_cap, is_alive, known);
             prunes.push((id as usize, lex));
         }
         for (i, lex) in prunes {
@@ -1144,6 +1154,15 @@ impl Sim {
                 }
             }
             self.try_conceive(i, adult, age);
+            // beliefs fade unless reinforced; hearsay and superstition fade faster
+            {
+                let m = &mut self.people[i].mind;
+                for b in m.beliefs.iter_mut() {
+                    let fade = if b.rel == Rel::Cursed || b.source.is_some() { 0.006 } else { 0.002 };
+                    b.conf -= fade;
+                }
+                m.beliefs.retain(|b| b.conf > 0.05);
+            }
             // unpractised skills fade; practices and beliefs fade more slowly
             {
                 let p = &mut self.people[i];
@@ -1168,6 +1187,7 @@ impl Sim {
                 }
             }
             // drives, emotions, memory upkeep
+            let dependents = self.people[i].children.iter().filter(|&&c| self.people[c as usize].alive && self.people[c as usize].age_cycles(tick, tpc) < 4.0).count() as f32;
             let knows_lampwatch = self.people[i].knows(n::LAMPWATCH);
             let knows_rites = self.people[i].knows(n::BURIAL) || self.people[i].knows(n::ANCESTOR);
             let p = &mut self.people[i];
@@ -1175,7 +1195,7 @@ impl Sim {
             m.drives[drv::HUNGER] = 1.0 - p.energy;
             m.drives[drv::SAFETY] = (m.emo[emo::FEAR] * 0.7 + m.drives[drv::SAFETY] * 0.3).min(1.0);
             m.drives[drv::BELONGING] = (m.drives[drv::BELONGING] + 0.08 * (0.5 + m.traits[1])).min(1.0);
-            m.drives[drv::STATUS] = (m.drives[drv::STATUS] + 0.02 * (0.3 + p.genome.dominance)).min(1.0);
+            m.drives[drv::STATUS] = (m.drives[drv::STATUS] * 0.9 + 0.02 * (0.3 + p.genome.dominance + m.emo[emo::SHAME])).min(1.0);
             // keep relationship values bounded; unseen acquaintances fade
             for md in m.models.iter_mut() {
                 md.affinity = md.affinity.clamp(-1.0, 1.0);
@@ -1191,9 +1211,9 @@ impl Sim {
                 }
             }
             m.drives[drv::CURIOSITY] = (m.drives[drv::CURIOSITY] + 0.06 * (0.3 + m.traits[2])).min(1.0);
-            m.drives[drv::REPRO] = if adult && p.mate.is_none() { (m.drives[drv::REPRO] + 0.05).min(1.0) } else { 0.0 };
-            m.drives[drv::REST] = (m.drives[drv::REST] + 0.3).min(1.0);
-            m.drives[drv::CARE] *= 0.9;
+            m.drives[drv::REPRO] = if adult && p.mate.is_none() && age < p.genome.max_age * 0.7 { (m.drives[drv::REPRO] + 0.05).min(1.0) } else { 0.0 };
+            // (tiredness accrues continuously in update_energy)
+            m.drives[drv::CARE] = (m.drives[drv::CARE] * 0.5 + dependents * 0.12).min(0.9);
             for e in m.emo.iter_mut() {
                 *e *= mcfg.emotion_decay;
             }
@@ -1275,6 +1295,9 @@ impl Sim {
         let child = if (tick - p.born) < (self.cfg.people.adult_cycles * self.cfg.time.ticks_per_cycle() as f32) as u64 { 0.7 } else { 1.0 };
         let burn = hunger * dt * (0.8 + 0.4 * p.genome.size) * (1.2 - 0.4 * p.genome.efficiency) * child;
         p.energy = (p.energy - burn).max(0.0);
+        if p.act != Act::Sleep {
+            p.mind.drives[drv::REST] = (p.mind.drives[drv::REST] + dt * 1.1).min(1.0);
+        }
         p.last_upd = tick;
     }
 
@@ -1313,7 +1336,7 @@ impl Sim {
             pp.stash -= from_stash;
             pp.carried -= units - from_stash;
             child.energy = (child.energy + units * 0.25).min(1.0);
-            pp.mind.drives[drv::CARE] = (pp.mind.drives[drv::CARE] + 0.2).min(1.0);
+            pp.mind.drives[drv::CARE] = (pp.mind.drives[drv::CARE] + 0.05).min(0.9);
             need_units -= units;
         }
     }
@@ -1382,6 +1405,12 @@ impl Sim {
         } else {
             (mother.phon.coin(&mut mother.rng), String::new())
         };
+        let mut name = name;
+        while name.len() < 3 {
+            let m = &mut self.people[mi];
+            let extra = m.phon.coin(&mut m.rng);
+            name.extend(extra);
+        }
         c.name = name.clone();
         c.name_gloss = gloss;
         c.mind.lex.adopt(Concept::Person(id), name.clone(), 0.9);
@@ -1470,6 +1499,22 @@ impl Sim {
     }
 
     // ---------------------------------------------------------------- knowledge
+
+    /// Successful use of a material is evidence against it being cursed.
+    pub fn disconfirm_curse(&mut self, i: usize, mats: u16) {
+        let m = &mut self.people[i].mind;
+        for b in m.beliefs.iter_mut() {
+            if b.rel == Rel::Cursed {
+                if let Concept::Kind(k) = b.subject {
+                    for mm in crate::discovery::mat::list(mats) {
+                        if crate::decide::mat_kind(mm) == k {
+                            b.conf -= 0.08;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     /// Practising a discovery keeps it (and its prerequisites) fresh.
     pub fn use_know(&mut self, i: usize, node: u8) {

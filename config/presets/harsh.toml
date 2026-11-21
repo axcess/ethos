@@ -1,0 +1,15 @@
+# A cruel tank: thin food, more gulpers, deadlier fevers, exaggerated Chicago extremes.
+name = "harsh"
+[world]
+algae_regrow = 0.11
+shell_allee = 0.15
+herds = 4
+[predators]
+initial = 6
+max = 10
+kill_chance = 0.18
+[disease]
+spontaneous_per_cycle = 0.25
+mortality_per_day = 0.025
+[climate]
+amplitude = 1.4

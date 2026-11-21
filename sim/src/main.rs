@@ -15,6 +15,8 @@ use tank_sim::export::{render_thought, write_run, Viewer};
 use tank_sim::metrics::{summarize, RunSummary};
 use tank_sim::sim::{Sim, ThoughtMode};
 
+const VIEWER_HTML: &str = include_str!("../../tools/viewer/index.html");
+
 struct Args(Vec<String>);
 impl Args {
     fn get(&self, k: &str) -> Option<String> {
@@ -154,7 +156,12 @@ fn cmd_run(args: &Args) {
     write_run(&sim, &out, &summary).unwrap();
     if let Some(mut v) = viewer {
         v.finish(&sim, vfrom, vto);
-        std::fs::write(format!("{out}/viewer.json"), serde_json::to_string(&v).unwrap()).unwrap();
+        let json = serde_json::to_string(&v).unwrap();
+        // A double-clickable page: the viewer plus the data as a script (works from file://)
+        std::fs::write(format!("{out}/viewer-data.js"), format!("window.TANK_DATA = {json};\n")).unwrap();
+        let html = VIEWER_HTML.replacen("<script>\n(() =>", "<script src=\"viewer-data.js\"></script>\n<script>\n(() =>", 1);
+        std::fs::write(format!("{out}/view.html"), html).unwrap();
+        std::fs::write(format!("{out}/viewer.json"), json).unwrap();
     }
     if args.has("--snapshot") {
         std::fs::write(format!("{out}/final.snap"), sim.snapshot()).unwrap();

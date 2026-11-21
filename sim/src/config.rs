@@ -135,7 +135,7 @@ pub struct PeopleCfg {
 impl Default for PeopleCfg {
     fn default() -> Self {
         PeopleCfg {
-            initial: 120,
+            initial: 80,
             bands: 4,
             adult_cycles: 8.0,
             max_age_min: 30.0,

@@ -1715,11 +1715,11 @@ impl Sim {
         pj.needs[need::STOLEN] += 1.0;
         self.counters.thefts += 1;
         let witnesses: Vec<u32> = self.near(x, y, 25.0).into_iter().filter(|&o| o != i as u32).collect();
-        let mut caught = victim_present && self.people[j].rng.chance(0.7);
+        let mut caught = victim_present && self.people[j].rng.chance(0.5);
         let mut seen_by = Vec::new();
         for &o in &witnesses {
             let vis = self.people[o as usize].genome.vision;
-            if self.people[o as usize].rng.chance(0.35 * (0.5 + vis)) {
+            if self.people[o as usize].rng.chance(0.2 * (0.5 + vis)) {
                 seen_by.push(o);
                 caught = true;
             }
@@ -1743,12 +1743,18 @@ impl Sim {
                 md.grudge = (md.grudge + 0.4).min(1.0);
                 self.people[oi].mind.feel(emo::ANGER, 0.6);
                 self.episode(oi, EpKind::StolenFrom, Some(iid), -0.6, 0.6);
+                // being robbed teaches that robbing is wrong
+                self.people[oi].mind.believe(Concept::Kind(Kind::Steal), Rel::Forbidden, 0.12, None, o, tick, false, bcap);
             }
             self.people[oi].mind.believe(Concept::Person(iid), Rel::Thief, 0.4, None, o, tick, false, bcap);
         }
         let place = place_of(x, y);
         let (ni, nj) = (self.name(iid), self.name(j as u32));
         self.emit(EvKind::Theft, vec![iid, j as u32], place, format!("{ni} is caught stealing food from {nj}"));
+        // a victim who catches the thief in the act reacts on the spot
+        if victim_present && self.people[j].alive && self.adult(j) {
+            self.interrupt(j, None);
+        }
     }
 
     fn punish(&mut self, i: usize, j: usize) {
@@ -1801,7 +1807,8 @@ impl Sim {
             let tb = self.people[oi].mind.belief(Concept::Person(jid), Rel::Thief);
             if tb > 0.3 || thief_belief_i > 0.5 {
                 let d = 0.15 * (0.5 + self.people[oi].mind.traits[5]);
-                self.people[oi].mind.believe(Concept::Kind(Kind::Steal), Rel::Forbidden, d, Some(iid), iid, tick, false, bcap);
+                // witnessed first-hand: own experience, not hearsay (origin stays with the punisher)
+                self.people[oi].mind.believe(Concept::Kind(Kind::Steal), Rel::Forbidden, d, None, iid, tick, false, bcap);
                 let md = self.people[oi].mind.model_mut(iid, tick, cap);
                 md.respect = (md.respect + 0.05).min(1.0);
             } else {

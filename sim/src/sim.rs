@@ -1161,7 +1161,13 @@ impl Sim {
             {
                 let m = &mut self.people[i].mind;
                 for b in m.beliefs.iter_mut() {
-                    let fade = if b.rel == Rel::Cursed || b.source.is_some() { 0.006 } else { 0.002 };
+                    let fade = if b.rel == Rel::Forbidden {
+                        0.001 // norms are cultural and slow to fade
+                    } else if b.rel == Rel::Cursed || b.source.is_some() {
+                        0.006
+                    } else {
+                        0.002
+                    };
                     b.conf -= fade;
                 }
                 m.beliefs.retain(|b| b.conf > 0.05);

@@ -1071,6 +1071,7 @@ impl Sim {
                 if stress > 0.05 {
                     let p = &mut self.people[i];
                     p.health -= pc.cold_damage * stress * if adult { 1.0 } else { 1.6 };
+                    p.energy = (p.energy - 0.12 * stress).max(0.0); // burning food to keep warm
                     p.needs[need::COLD] += stress;
                     p.mind.today_out |= 1 << outcome::COLD_STRESS;
                     if stress > 0.5 && p.rng.chance(0.2) {
@@ -1094,17 +1095,17 @@ impl Sim {
                     p.mind.today_out |= 1 << outcome::PLENTY;
                 }
                 if p.health <= 0.0 {
-                    let cause = if p.energy <= 0.01 {
+                    let cause = if p.mind.today_out & (1 << outcome::COLD_STRESS) != 0 {
+                        "cold and hunger"
+                    } else if p.energy <= 0.01 {
                         "starvation"
-                    } else if p.mind.today_out & (1 << outcome::COLD_STRESS) != 0 {
-                        "cold"
                     } else {
                         "injuries"
                     };
                     self.die(i, cause);
                     continue;
                 }
-                if p.energy > 0.3 && p.infected.is_none() {
+                if p.energy > 0.3 && p.infected.is_none() && p.mind.today_out & (1 << outcome::COLD_STRESS) == 0 {
                     p.health = (p.health + 0.04).min(1.0);
                 }
                 // spoilage

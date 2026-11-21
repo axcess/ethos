@@ -46,7 +46,9 @@ pub struct CycleCounters {
 impl CycleCounters {
     pub fn record_death(&mut self, cause: &str) {
         self.deaths += 1;
-        if cause.contains("starv") {
+        if cause.contains("cold") {
+            self.deaths_cold += 1;
+        } else if cause.contains("starv") {
             self.deaths_starvation += 1;
         } else if cause.contains("gulper") {
             self.deaths_predator += 1;

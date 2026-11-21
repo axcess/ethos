@@ -146,8 +146,8 @@ impl Default for PeopleCfg {
             carry_cap: 4.0,
             capacity_min: 0.78,
             capacity_max: 0.95,
-            temp_comfort: 9.0,
-            cold_damage: 0.04,
+            temp_comfort: 12.0,
+            cold_damage: 0.07,
             starve_damage: 0.12,
             max_population: 2000,
         }
@@ -196,7 +196,7 @@ impl Default for DiseaseCfg {
     fn default() -> Self {
         DiseaseCfg {
             spontaneous_per_cycle: 0.15,
-            beta: 0.05,
+            beta: 0.08,
             duration_days: 8,
             mortality_per_day: 0.015,
             immunity_cycles: 8.0,

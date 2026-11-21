@@ -29,6 +29,7 @@ pub struct CycleCounters {
     pub punishments: u32,
     pub heals: u32,
     pub taught: u32,
+    pub imitated: u32,
     pub inventions: u32,
     pub knowledge_lost: u32,
     pub structures: u32,

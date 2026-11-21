@@ -388,6 +388,7 @@ impl Sim {
             stranger: false,
             predators_killed: 0,
             founded_camps: 0,
+            prestige: 0.0,
             consider_move_day: 0,
         }
     }
@@ -1155,6 +1156,7 @@ impl Sim {
                 }
             }
             self.try_conceive(i, adult, age);
+            self.people[i].prestige *= 0.985;
             // beliefs fade unless reinforced; hearsay and superstition fade faster
             {
                 let m = &mut self.people[i].mind;
@@ -1344,7 +1346,7 @@ impl Sim {
 
     fn try_conceive(&mut self, i: usize, adult: bool, age: f32) {
         let p = &self.people[i];
-        if !adult || !p.female || p.pregnant.is_some() || p.energy < 0.35 || age > p.genome.max_age * 0.75 {
+        if !adult || !p.female || p.pregnant.is_some() || p.energy < 0.35 || age > p.genome.max_age * 0.75 || p.stash + p.carried < 2.5 {
             return;
         }
         if self.alive.len() as u32 >= self.cfg.people.max_population {
@@ -1512,6 +1514,32 @@ impl Sim {
                             b.conf -= 0.08;
                         }
                     }
+                }
+            }
+        }
+    }
+
+    /// Using a skill where others can see it: bystanders who respect the user may copy it
+    /// (prestige-biased social learning, DESIGN §7.10).
+    pub fn demonstrate(&mut self, i: usize, node: u8) {
+        if !self.people[i].knows(node) || !self.people[i].rng.chance(0.2) {
+            return;
+        }
+        let (x, y) = self.people[i].pos(self.tick);
+        let iid = i as u32;
+        let rate = self.cfg.discovery.imitation;
+        let material = self.people[i].know(node).map_or(0, |k| k.material);
+        for o in self.near(x, y, 25.0) {
+            let oi = o as usize;
+            if o == iid || self.people[oi].knows(node) {
+                continue;
+            }
+            let respect = self.people[oi].mind.model(iid).map_or(0.0, |m| m.respect);
+            let p_learn = rate * (0.3 + respect * 2.0) * (0.5 + self.people[oi].genome.social_learning);
+            if self.people[oi].rng.chance(p_learn) {
+                if self.learn(oi, node, material, KnowSource::Imitated(iid)) {
+                    self.people[i].prestige += 0.05;
+                    self.counters.imitated += 1;
                 }
             }
         }

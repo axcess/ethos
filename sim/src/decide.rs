@@ -186,6 +186,8 @@ impl Sim {
         let stockpiling = matches!(p.intent, Some(Intent::Stockpile { target, until }) if until > tick && stash < target);
         let believes_spread = m.belief(Concept::Kind(Kind::Sickness), Rel::Spreads) > 0.5 || p.knows(n::QUARANTINE);
         let norm_steal = m.belief(Concept::Kind(Kind::Steal), Rel::Forbidden);
+        // a mind that others defer to behaves like it: it keeps order and looks after the camp
+        let standing = (p.prestige / 1.5).min(1.0);
 
         // Eat
         if food_have > 0.2 {
@@ -301,7 +303,7 @@ impl Sim {
             let thief = m.belief(Concept::Person(o), Rel::Thief);
             let recently = m.episodes.iter().any(|e| e.other == Some(o) && matches!(e.kind, EpKind::Punished | EpKind::StolenFrom) && tick.saturating_sub(e.tick) < 2 * self.tpd());
             let punished_lately = p.thoughts.iter().rev().take(24).any(|t| t.chose == Act::Punish { who: o });
-            if (thief > 0.4 || grudge > 0.5) && !punished_lately && (recently || thief > 0.6 || tr[3] > 0.6) {
+            if (thief > 0.4 || grudge > 0.5) && !punished_lately && (recently || thief > 0.6 || tr[3] > 0.6 || (standing > 0.5 && thief > 0.3)) {
                 saw_list.push((saw::THIEF, o));
                 let w = thief * (norm_steal + 0.2) + grudge;
                 if thief_here.map_or(true, |t| w > t.1) {
@@ -346,7 +348,7 @@ impl Sim {
             if food_have > 1.5 {
                 let norm = if p.knows(n::SHARING) { 0.35 } else { 0.0 };
                 let holding_back = if share_why.0 == 0.0 { m.drives[drv::CARE] * 0.6 } else { 0.0 };
-                let u = qh * (deserve + norm + 0.1) - hunger * 0.8 - exp_h * 0.3 * (1.0 - p.genome.cooperation) - holding_back - 0.1;
+                let u = qh * (deserve + norm + 0.1 + standing * 0.3) - hunger * 0.8 - exp_h * 0.3 * (1.0 - p.genome.cooperation) - holding_back - 0.1;
                 let mut cc = c(Act::Share { who: o }, u, &[(why::KIN, share_why.0), (why::NORM, norm), (why::TRUST, share_why.1), (why::HUNGER, -hunger)]);
                 cc.saw = (saw::HUNGRY, o);
                 cands.push(cc);
@@ -381,7 +383,7 @@ impl Sim {
             if adult {
                 let them = &self.people[o as usize];
                 let fear_them = m.model(o).map_or(0.0, |mm| mm.fear);
-                let u = anger * 0.6 + w * 0.5 + tr[3] * 0.3 + tr[5] * norm_steal * 0.2 - them.genome.dominance * 0.25 - fear * 0.2 - fear_them * 0.4 - tr[4] * 0.2 - 0.3;
+                let u = anger * 0.6 + w * 0.5 + tr[3] * 0.3 + tr[5] * norm_steal * 0.2 + standing * 0.35 - them.genome.dominance * 0.25 - fear * 0.2 - fear_them * 0.4 - tr[4] * 0.2 - 0.3;
                 let mut cc = c(Act::Punish { who: o }, u, &[(why::GRUDGE, w), (why::ANGER, anger), (why::NORM, norm_steal)]);
                 cc.saw = (saw::THIEF, o);
                 cands.push(cc);
@@ -411,7 +413,7 @@ impl Sim {
             if let Some(hid) = best_h {
                 let lure = if p.knows(n::LURE) { 0.15 } else { 0.0 };
                 let spear = if p.knows(n::SPEAR) { 0.2 } else { 0.0 };
-                let u = hunger * 0.5 + exp_h * 0.4 + m.drives[drv::STATUS] * 0.25 + tr[0] * 0.3 + p.skill_hunt * 0.3 + lure + spear - bd / 400.0 - p.needs[need::HUNT_FAIL] * 0.05 - 0.35 - if night { 0.4 } else { 0.0 };
+                let u = hunger * 0.5 + exp_h * 0.4 + m.drives[drv::STATUS] * 0.25 + tr[0] * 0.3 + p.skill_hunt * 0.3 + lure + spear + standing * 0.2 - bd / 400.0 - p.needs[need::HUNT_FAIL] * 0.05 - 0.35 - if night { 0.4 } else { 0.0 };
                 let mut cc = c(Act::Hunt { task: hid }, u, &[(why::HUNGER, hunger), (why::EXPECT_HUNGER, exp_h), (why::STATUS, m.drives[drv::STATUS])]);
                 cc.saw = (saw::HERD, hid);
                 cands.push(cc);
@@ -551,7 +553,8 @@ impl Sim {
             }
         }
         let danger = m.places[camp.place as usize].danger;
-        let d = 0.45 * crowd + 0.35 * scarcity + 0.5 * conflict + 0.25 * danger - (ties * 0.05).min(0.5);
+        let lost_leader = m.beliefs.iter().any(|b| b.rel == Rel::Leads && b.conf > 0.3 && matches!(b.subject, Concept::Person(x) if !self.people[x as usize].alive));
+        let d = if lost_leader { 0.3 } else { 0.0 } + 0.45 * crowd + 0.35 * scarcity + 0.5 * conflict + 0.25 * danger - (ties * 0.05).min(0.5);
         let u = d * 1.3 + m.traits[0] * 0.25 - 0.55;
         if u < 0.0 {
             return None;
@@ -769,8 +772,12 @@ impl Sim {
                 why_v = [(why::TRUST, aff), (why::KIN, if k != kin::NONE { 0.6 } else { 0.0 }), (why::RESPECT, respect)];
             }
         }
-        let u = u + self.people[j].rng.normal() * self.cfg.mind.noise;
+        let leads = self.people[j].mind.belief(Concept::Person(iid), Rel::Leads);
+        let u = u + leads * 0.3 + self.people[j].rng.normal() * self.cfg.mind.noise;
         let ok = u > 0.0;
+        if ok && matches!(req, Req::Hunt | Req::Migrate) {
+            self.people[i].prestige += 0.12;
+        }
         let cap = self.cfg.mind.model_cap;
         {
             let (pi, pj) = pair_mut(&mut self.people, i, j);
@@ -941,6 +948,8 @@ impl Sim {
                     self.people[mi].skill_hunt = (self.people[mi].skill_hunt + 0.04).min(1.0);
                     self.use_know(mi, n::SPEAR);
                     self.use_know(mi, n::LURE);
+                    self.demonstrate(mi, n::SPEAR);
+                    self.demonstrate(mi, n::LURE);
                     self.people[mi].needs[need::HUNT_FAIL] *= 0.5;
                     if m != leader {
                         let unfair = share < fair * 0.8;
@@ -975,6 +984,7 @@ impl Sim {
                     } else {
                         self.episode(mi, EpKind::HuntWon, None, 0.7, 0.4);
                         self.people[mi].mind.drives[drv::STATUS] *= 0.5;
+                        self.people[mi].prestige += 0.15;
                     }
                     for &o in &present {
                         if o != m {
@@ -1181,6 +1191,7 @@ impl Sim {
                 }
                 for node in [n::NET, n::SCRAPER, n::BASKET] {
                     self.use_know(i, node);
+                    self.demonstrate(i, node);
                 }
                 if got > 1.0 {
                     let pm = self.world.places[place as usize].mats;
@@ -1272,6 +1283,7 @@ impl Sim {
                     self.episode(j, EpKind::Helped, Some(i as u32), 0.6, 0.4);
                     self.observe_role(i, role::HEALER, Some(Rel::Heals));
                     self.use_know(i, n::REMEDY);
+                    self.demonstrate(i, n::REMEDY);
                     self.counters.heals += 1;
                 }
             }
@@ -1646,6 +1658,7 @@ impl Sim {
         md.respect = (md.respect + 0.04).min(1.0);
         md.seen[role::TEACHER] += 1.0;
         self.people[s].mind.drives[drv::STATUS] *= 0.7;
+        self.people[s].prestige += 0.04;
         self.observe_role(s, role::TEACHER, Some(Rel::Teaches));
         // tally marks: teachers who know them leave a record at camp
         if self.people[s].knows(n::TALLY) && self.at_home(s) {
@@ -1823,6 +1836,7 @@ impl Sim {
             self.world.predators[k].alive = false;
             self.people[i].predators_killed += 1;
             self.people[i].mind.drives[drv::STATUS] = 0.0;
+            self.people[i].prestige += 0.3;
             self.people[i].mind.feel(emo::JOY, 0.6);
             self.people[i].needs[need::PREDATOR] *= 0.5;
             let name = self.name(i as u32);
@@ -1891,6 +1905,7 @@ impl Sim {
         }
         self.observe_role(i, role::BUILDER, None);
         self.use_know(i, node);
+        self.demonstrate(i, node);
     }
 
     /// Need-driven experimentation (DESIGN §10.2).

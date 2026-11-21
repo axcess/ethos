@@ -151,6 +151,8 @@ pub struct Person {
     pub stranger: bool,
     pub predators_killed: u32,
     pub founded_camps: u32,
+    /// Standing as experienced by this mind: others accepting, following and learning from it.
+    pub prestige: f32,
     pub consider_move_day: u64,
 }
 

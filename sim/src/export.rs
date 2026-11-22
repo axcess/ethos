@@ -212,16 +212,16 @@ pub fn write_run(sim: &Sim, dir: &str, summary: &crate::metrics::RunSummary) -> 
     std::fs::write(format!("{dir}/summary.json"), serde_json::to_string_pretty(summary).unwrap())?;
     // cycles.csv
     let mut f = std::io::BufWriter::new(std::fs::File::create(format!("{dir}/cycles.csv"))?);
-    writeln!(f, "cycle,real_year,surface_t,pop,adults,births,deaths,starve,predator,disease,old,cold,violence,camps,groups,formed,splits,merges,predators,herd,food,known_nodes,inventions,lost_total,languages,min_intel,coherence,lexicon,grammar_tier,comm_success,roles,belief_div,false_frac,culture_false,beh_entropy,beh_div,change,shares,asks,granted,hunts_won,hunts_lost,thefts,punish,heals,taught,gathered,hunted,eaten,spoiled,fatigue,foul")?;
+    writeln!(f, "cycle,real_year,surface_t,pop,adults,births,deaths,starve,predator,disease,old,cold,violence,camps,groups,formed,splits,merges,predators,herd,food,known_nodes,inventions,lost_total,languages,min_intel,coherence,lexicon,grammar_tier,comm_success,roles,belief_div,false_frac,culture_false,beh_entropy,beh_div,change,shares,asks,granted,hunts_won,hunts_lost,thefts,punish,heals,taught,gathered,hunted,eaten,spoiled,fatigue,foul,algae_grown,shell_grown")?;
     for s in &sim.stats {
         let c = &s.c;
         writeln!(
             f,
-            "{},{},{:.1},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.0},{},{},{},{},{:.2},{:.3},{:.0},{},{:.3},{},{:.3},{:.3},{},{:.3},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{:.0},{:.0},{:.0},{:.0},{:.3},{:.3}",
+            "{},{},{:.1},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.0},{},{},{},{},{:.2},{:.3},{:.0},{},{:.3},{},{:.3},{:.3},{},{:.3},{:.3},{:.3},{},{},{},{},{},{},{},{},{},{:.0},{:.0},{:.0},{:.0},{:.3},{:.3},{:.0},{:.0}",
             s.cycle, s.real_year, s.surface_t, s.pop, s.adults, c.births, c.deaths, c.deaths_starvation, c.deaths_predator, c.deaths_disease, c.deaths_old, c.deaths_cold, c.deaths_violence,
             s.camps, s.groups, c.groups_formed, c.group_splits, c.group_merges, s.predators, s.herd_animals, s.food_total, s.known_nodes, c.inventions, s.knowledge_lost_total, s.languages,
             s.min_intelligibility, s.coherence, s.lexicon_mean, s.max_grammar_tier, s.comm_success, s.roles_distinct, s.belief_diversity, s.false_belief_frac, s.culture_specific_false,
-            s.behavior_entropy, s.behavior_divergence, s.change_index, c.shares, c.asks, c.asks_granted, c.hunts_won, c.hunts_lost, c.thefts, c.punishments, c.heals, c.taught, c.food_gathered, c.food_hunted, c.food_eaten, c.food_spoiled, s.mean_fatigue, s.max_foul
+            s.behavior_entropy, s.behavior_divergence, s.change_index, c.shares, c.asks, c.asks_granted, c.hunts_won, c.hunts_lost, c.thefts, c.punishments, c.heals, c.taught, c.food_gathered, c.food_hunted, c.food_eaten, c.food_spoiled, s.mean_fatigue, s.max_foul, c.algae_grown, c.shell_grown
         )?;
     }
     drop(f);

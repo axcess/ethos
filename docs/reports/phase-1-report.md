@@ -62,3 +62,15 @@ The most notable lives are often heroic guards who drive off several gulpers and
 2. **Early crash:** soften the founders' first winters (start with more stored food), or keep the bottleneck as drama? *Recommend:* soften it modestly.
 3. **Agriculture:** make the algae garden harder to reach (calendar prerequisite, larger group) now, or leave it for Phase 3? *Recommend:* add the prerequisite now; it's cheap.
 4. **Leadership:** give leaders real effects (coordinating hunts, settling disputes, choosing where to move) so that losing one matters? *Recommend:* yes, before Phase 2.
+
+---
+
+## Update 2026-11-22: boom-bust feedbacks, and a correction
+
+**Correction.** Tending a shellfish bed created about 24 food out of nothing per action. Tanks that invented shellfish beds drew most of their food from this bug (gathering 187,000 units a cycle against 8,000 of real regrowth). **The earlier "booms to 500–1,400" and the cycle-80 pacing estimate were artefacts of this bug.** Fixed; food now balances (gathered ≈ regrowth).
+
+**Added (no code targets population size; each feedback is local and physical):** beds wear with harvest and recover when rested; crowded camps foul nearby water (less regrowth, more fever); fever spreads faster in crowds; garden tending raises growth. Also fixed: hungry children (2–8) are now fed by parents and kin, and full stashes curb further foraging (about a third of gathered food was rotting).
+
+**Result (24 seeds × 60 cycles, `phase-1-batch-boombust.md`):** nearly every tank now booms from 80 to about 200, overshoots its regrowth, and the algae base collapses (a tragedy of the commons). 18/24 crash by about 70% and 5/24 crash and then regrow past the old peak. **None escape.** 29% go extinct by cycle 60, which is above the harshness target. The exit criteria are unchanged: 4/5 pass (100/100/100/0/96%).
+
+**Open:** escape is currently almost impossible; see OQ-17.

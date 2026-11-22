@@ -214,7 +214,9 @@ impl Sim {
             }
             places.sort();
             places.dedup();
-            let base = hunger * 0.9 + exp_h * 0.5 + if stockpiling { 0.45 } else { 0.0 } + if stash < 2.0 { 0.25 } else { 0.0 } + 0.15 - (carried / cap) * 0.9 - if night { if p.knows(n::GLOWLAMP) { 0.1 } else { 0.45 } } else { 0.0 };
+            // a full stash only rots: foraging loses appeal unless deliberately stockpiling
+            let glut = if stockpiling { 0.0 } else { (stash / 10.0).min(0.6) };
+            let base = hunger * 0.9 + exp_h * 0.5 + if stockpiling { 0.45 } else { 0.0 } + if stash < 2.0 { 0.25 } else { 0.0 } + 0.15 - glut - (carried / cap) * 0.9 - if night { if p.knows(n::GLOWLAMP) { 0.1 } else { 0.45 } } else { 0.0 };
             for pl in places {
                 if !self.world.places[pl as usize].passable {
                     continue;
@@ -1899,8 +1901,8 @@ impl Sim {
                     if node == n::GARDEN {
                         cell.garden = (cell.garden + 0.25).min(1.0);
                     } else if cell.hab == Habitat::Reef || cell.shell_cap > 5.0 {
+                        // reseeding protects the bed from collapse; it does not create food
                         cell.bed = true;
-                        cell.shell = (cell.shell + 2.0).min(cell.shell_cap);
                     }
                 }
             }

@@ -572,6 +572,8 @@ impl Sim {
         self.world.prev_climate = std::mem::replace(&mut self.world.climate, c);
         self.world.update_foul(&self.cfg.world);
         self.world.daily(&self.cfg.world);
+        self.counters.algae_grown += self.world.grown_today.0;
+        self.counters.shell_grown += self.world.grown_today.1;
         crate::scenario::apply_day(self, day);
         self.herds_daily();
         self.predators_daily();
@@ -1152,7 +1154,8 @@ impl Sim {
                 self.use_know(i, n::CALENDAR);
             }
             // infants are fed by parents with food
-            if age < 2.0 {
+            // parents and kin feed infants, and hungry children until they are grown
+            if age < 2.0 || (!adult && self.people[i].energy < 0.5) {
                 self.feed_infant(i);
             }
             // pregnancy

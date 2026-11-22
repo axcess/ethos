@@ -77,13 +77,14 @@ pub struct WorldCfg {
     pub foul_per_person: f32,
     pub foul_clear: f32,
     pub crowd_disease: f32,
+    pub garden_growth: f32,
 }
 impl Default for WorldCfg {
     fn default() -> Self {
         WorldCfg {
             ridge: true,
             vents: 2,
-            algae_regrow: 0.14,
+            algae_regrow: 0.16,
             algae_cap_scale: 1.0,
             shell_regrow: 0.04,
             shell_cap_scale: 1.0,
@@ -99,6 +100,7 @@ impl Default for WorldCfg {
             foul_per_person: 0.0006,
             foul_clear: 0.04,
             crowd_disease: 1.0,
+            garden_growth: 2.5,
         }
     }
 }
@@ -153,7 +155,7 @@ impl Default for PeopleCfg {
             max_age_min: 30.0,
             max_age_max: 50.0,
             gestation_days: 36,
-            conceive_per_day: 0.05,
+            conceive_per_day: 0.03,
             hunger_per_day: 0.55,
             carry_cap: 4.0,
             capacity_min: 0.78,

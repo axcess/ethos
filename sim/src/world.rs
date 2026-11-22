@@ -129,6 +129,9 @@ pub struct World {
     pub regrow_mult: Vec<f32>,
     /// Fouling of the water by crowded camps (0..1) per place.
     pub foul: Vec<f32>,
+    /// Diagnostics: regrowth produced today (algae, shellfish).
+    #[serde(skip)]
+    pub grown_today: (f32, f32),
     /// Attacks per place in the current cycle (ground truth for belief checks).
     pub attacks_by_place: Vec<u32>,
     pub attacks_by_place_prev: Vec<u32>,
@@ -344,6 +347,7 @@ impl World {
             bloom: 0.0,
             regrow_mult: vec![1.0; N_PLACES],
             foul: vec![0.0; N_PLACES],
+            grown_today: (0.0, 0.0),
             attacks_by_place: vec![0; N_PLACES],
             attacks_by_place_prev: vec![0; N_PLACES],
         };
@@ -395,6 +399,7 @@ impl World {
         self.bloom *= 0.85;
         let deep_t = 8.0;
         let light_base = c.brightness * (0.3 + c.lamp_frac) * (1.0 - 0.7 * c.ice);
+        let mut grown = (0.0f32, 0.0f32);
         for y in 0..H {
             for x in 0..W {
                 let i = y * W + x;
@@ -411,15 +416,20 @@ impl World {
                 if cap > 0.0 {
                     let a = cell.algae;
                     let growth = wc.algae_regrow * light * tf * a * (1.0 - a / cap) + 0.008 * cap * light * tf;
-                    let worn = 1.0 - wc.fatigue_effect * cell.fatigue;
-                    cell.algae = (a + growth * mult * worn).clamp(0.0, cap);
+                    // tending (weeding, clearing, spreading) makes beds grow faster; wear undoes it
+                    let worn = (1.0 + wc.garden_growth * cell.garden) * (1.0 - wc.fatigue_effect * cell.fatigue);
+                    let na = (a + growth * mult * worn).clamp(0.0, cap);
+                    grown.0 += (na - a).max(0.0);
+                    cell.algae = na;
                 }
                 let scap = cell.shell_cap;
                 if scap > 0.0 {
                     let s = cell.shell;
                     let allee = if cell.bed { 0.0 } else { wc.shell_allee };
                     let g = wc.shell_regrow * s * (1.0 - s / scap) * ((s / scap - allee) * 4.0).clamp(-1.0, 1.0);
-                    cell.shell = (s + g * mult + 0.0005 * scap).clamp(0.0, scap);
+                    let ns = (s + g * mult + 0.0005 * scap).clamp(0.0, scap);
+                    grown.1 += (ns - s).max(0.0);
+                    cell.shell = ns;
                 }
                 cell.garden *= 0.995;
                 // rest restores worn beds; continued harvest keeps them worn
@@ -427,6 +437,7 @@ impl World {
                 cell.harvested_today = false;
             }
         }
+        self.grown_today = grown;
     }
 
     /// Food available to forage at a place: (best cell index, amount)

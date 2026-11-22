@@ -34,6 +34,8 @@ pub struct CycleCounters {
     pub food_hunted: f32,
     pub food_eaten: f32,
     pub food_spoiled: f32,
+    pub algae_grown: f32,
+    pub shell_grown: f32,
     pub inventions: u32,
     pub knowledge_lost: u32,
     pub structures: u32,
@@ -167,7 +169,8 @@ pub fn classify_boom(pops: &[u32]) -> (String, Option<u64>, Option<u64>, f32) {
     }
     let mut early: Vec<u32> = pops[..8].to_vec();
     early.sort();
-    let base = early[early.len() / 2].max(1) as f32;
+    // the early level: founding population or the early median, whichever is higher
+    let base = early[early.len() / 2].max(pops[0]).max(1) as f32;
     let Some(b) = pops.iter().position(|&p| p as f32 >= 1.5 * base) else {
         return ("none".into(), None, None, 0.0);
     };

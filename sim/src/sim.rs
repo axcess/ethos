@@ -570,6 +570,7 @@ impl Sim {
             self.emit(EvKind::ClimateExtreme, vec![], 0, text);
         }
         self.world.prev_climate = std::mem::replace(&mut self.world.climate, c);
+        self.world.update_foul(&self.cfg.world);
         self.world.daily(&self.cfg.world);
         crate::scenario::apply_day(self, day);
         self.herds_daily();
@@ -928,9 +929,13 @@ impl Sim {
         let tick = self.tick;
         let tpd = self.tpd();
         let dpc = self.cfg.time.days_per_cycle() as f32;
-        if !self.alive.is_empty() && self.dis_rng.chance(dc.spontaneous_per_cycle / dpc) {
-            let k = self.dis_rng.below(self.alive.len() as u32) as usize;
-            let id = self.alive[k];
+        let max_foul = self.world.foul.iter().fold(0.0f32, |a, b| a.max(*b));
+        if !self.alive.is_empty() && self.dis_rng.chance(dc.spontaneous_per_cycle / dpc * (1.0 + 4.0 * max_foul)) {
+            // fevers tend to break out where the water is foulest
+            let foulest = (0..N_PLACES).max_by(|a, b| self.world.foul[*a].partial_cmp(&self.world.foul[*b]).unwrap().then(b.cmp(a))).unwrap_or(0);
+            let cands: Vec<u32> = if max_foul > 0.2 && !self.at_place[foulest].is_empty() { self.at_place[foulest].clone() } else { self.alive.clone() };
+            let k = self.dis_rng.below(cands.len() as u32) as usize;
+            let id = cands[k];
             if self.people[id as usize].immune_until <= tick && self.people[id as usize].infected.is_none() {
                 self.infect(id as usize);
                 let place = self.place_of_person(id as usize);
@@ -944,6 +949,7 @@ impl Sim {
             if n_inf == 0 {
                 continue;
             }
+            let crowd = 1.0 + self.cfg.world.crowd_disease * (here.len() as f32 / 40.0 + 2.0 * self.world.foul[pl]);
             for &id in &here {
                 let p = &mut self.people[id as usize];
                 if !p.alive {
@@ -958,7 +964,7 @@ impl Sim {
                     k.prof = (k.prof + 0.03).min(1.0);
                 }
                 let exposure = if careful { 0.3 } else { 1.0 };
-                let pinf = 1.0 - libm::powf(1.0 - dc.beta * exposure, n_inf as f32);
+                let pinf = 1.0 - libm::powf(1.0 - (dc.beta * exposure * crowd).min(0.9), n_inf as f32);
                 if self.dis_rng.chance(pinf) {
                     self.infect(id as usize);
                 }

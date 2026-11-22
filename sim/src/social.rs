@@ -690,6 +690,11 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
         behavior_entropy: h_mean,
         behavior_divergence: divergence,
         change_index: change,
+        mean_fatigue: {
+            let v: Vec<f32> = sim.world.cells.iter().filter(|c| c.algae_cap > 0.0).map(|c| c.fatigue).collect();
+            v.iter().sum::<f32>() / v.len().max(1) as f32
+        },
+        max_foul: sim.world.foul.iter().fold(0.0f32, |a, b| a.max(*b)),
         decisions: sim.decisions,
         c: cnt,
     };

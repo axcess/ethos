@@ -98,6 +98,8 @@ pub struct CycleStats {
     pub behavior_entropy: f32,
     pub behavior_divergence: f32,
     pub change_index: f32,
+    pub mean_fatigue: f32,
+    pub max_foul: f32,
     pub decisions: u64,
     pub c: CycleCounters,
 }
@@ -151,6 +153,47 @@ pub struct RunSummary {
     pub state_hash: String,
     pub real_years: Vec<u32>,
     pub activity_share: Vec<(String, f32)>,
+    /// none | crash | crash_recovered | escaped | sagged
+    pub boom_outcome: String,
+    pub boom_cycle: Option<u64>,
+    pub crash_cycle: Option<u64>,
+    pub crash_depth: f32,
+}
+
+/// Classify what happened after a population boom (≥ 1.5× the early level).
+pub fn classify_boom(pops: &[u32]) -> (String, Option<u64>, Option<u64>, f32) {
+    if pops.len() < 12 {
+        return ("none".into(), None, None, 0.0);
+    }
+    let mut early: Vec<u32> = pops[..8].to_vec();
+    early.sort();
+    let base = early[early.len() / 2].max(1) as f32;
+    let Some(b) = pops.iter().position(|&p| p as f32 >= 1.5 * base) else {
+        return ("none".into(), None, None, 0.0);
+    };
+    let mut peak = 0u32;
+    let mut crash: Option<(usize, f32, u32)> = None;
+    for (k, &p) in pops.iter().enumerate().skip(b) {
+        if crash.is_none() {
+            peak = peak.max(p);
+            if (p as f32) <= 0.7 * peak as f32 {
+                crash = Some((k, 1.0 - p as f32 / peak as f32, peak));
+            }
+        } else if let Some((_, d, pk)) = crash {
+            let depth = 1.0 - p as f32 / pk as f32;
+            if depth > d {
+                crash = Some((crash.unwrap().0, depth, pk));
+            }
+        }
+    }
+    let last = *pops.last().unwrap();
+    match crash {
+        Some((k, d, pk)) => {
+            let recovered = last >= pk;
+            ((if recovered { "crash_recovered" } else { "crash" }).into(), Some(b as u64), Some(k as u64), d)
+        }
+        None => ((if last as f32 >= 0.9 * peak as f32 { "escaped" } else { "sagged" }).into(), Some(b as u64), None, 0.0),
+    }
 }
 
 pub fn summarize(sim: &crate::sim::Sim, scenario: &str, wall: f64) -> RunSummary {
@@ -230,5 +273,11 @@ pub fn summarize(sim: &crate::sim::Sim, scenario: &str, wall: f64) -> RunSummary
     let mut v: Vec<(String, f32)> = (0..crate::person::N_ACT).map(|k| (crate::person::ACT_NAMES[k].to_string(), (tot[k] as f32 / sum as f32 * 1000.0).round() / 10.0)).collect();
     v.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     r.activity_share = v;
+    let pops: Vec<u32> = s.iter().map(|c| c.pop).collect();
+    let (o, bc, cc, d) = classify_boom(&pops);
+    r.boom_outcome = o;
+    r.boom_cycle = bc;
+    r.crash_cycle = cc;
+    r.crash_depth = d;
     r
 }

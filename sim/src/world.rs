@@ -40,6 +40,9 @@ pub struct Cell {
     pub garden: f32,
     pub bed: bool,
     pub heat: f32,
+    /// Wear from harvesting (0..1): worn beds regrow slowly until rested (fallow).
+    pub fatigue: f32,
+    pub harvested_today: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -124,6 +127,8 @@ pub struct World {
     pub bloom: f32,
     /// Scenario multiplier on regrowth (famine < 1 < windfall), per place.
     pub regrow_mult: Vec<f32>,
+    /// Fouling of the water by crowded camps (0..1) per place.
+    pub foul: Vec<f32>,
     /// Attacks per place in the current cycle (ground truth for belief checks).
     pub attacks_by_place: Vec<u32>,
     pub attacks_by_place_prev: Vec<u32>,
@@ -255,6 +260,8 @@ impl World {
                     shell_cap: scap,
                     temp: 12.0,
                     garden: 0.0,
+                    fatigue: 0.0,
+                    harvested_today: false,
                     bed: false,
                     heat: 0.0,
                 });
@@ -336,6 +343,7 @@ impl World {
             next_pred_id: 0,
             bloom: 0.0,
             regrow_mult: vec![1.0; N_PLACES],
+            foul: vec![0.0; N_PLACES],
             attacks_by_place: vec![0; N_PLACES],
             attacks_by_place_prev: vec![0; N_PLACES],
         };
@@ -367,6 +375,18 @@ impl World {
     }
 
     /// Daily environment update: temperatures, light, regrowth.
+    /// Camps foul the water around them in proportion to how many live there.
+    pub fn update_foul(&mut self, wc: &WorldCfg) {
+        let mut load = vec![0.0f32; N_PLACES];
+        for c in self.camps.iter().filter(|c| c.abandoned.is_none()) {
+            load[c.place as usize] += c.members as f32;
+        }
+        for p in 0..N_PLACES {
+            let f = &mut self.foul[p];
+            *f = (*f * (1.0 - wc.foul_clear) + load[p] * wc.foul_per_person).clamp(0.0, 1.0);
+        }
+    }
+
     pub fn daily(&mut self, wc: &WorldCfg) {
         let c = &self.climate;
         if c.storm {
@@ -379,7 +399,7 @@ impl World {
             for x in 0..W {
                 let i = y * W + x;
                 let place = place_of((x as f32 + 0.5) * CELL, (y as f32 + 0.5) * CELL) as usize;
-                let mult = self.regrow_mult[place];
+                let mult = self.regrow_mult[place] * (1.0 - 0.5 * self.foul[place]);
                 let cell = &mut self.cells[i];
                 if cell.hab == Habitat::Rock {
                     continue;
@@ -391,7 +411,8 @@ impl World {
                 if cap > 0.0 {
                     let a = cell.algae;
                     let growth = wc.algae_regrow * light * tf * a * (1.0 - a / cap) + 0.008 * cap * light * tf;
-                    cell.algae = (a + growth * mult).clamp(0.0, cap);
+                    let worn = 1.0 - wc.fatigue_effect * cell.fatigue;
+                    cell.algae = (a + growth * mult * worn).clamp(0.0, cap);
                 }
                 let scap = cell.shell_cap;
                 if scap > 0.0 {
@@ -401,6 +422,9 @@ impl World {
                     cell.shell = (s + g * mult + 0.0005 * scap).clamp(0.0, scap);
                 }
                 cell.garden *= 0.995;
+                // rest restores worn beds; continued harvest keeps them worn
+                cell.fatigue = (cell.fatigue - if cell.harvested_today { wc.fatigue_rest * 0.2 } else { wc.fatigue_rest }).max(0.0);
+                cell.harvested_today = false;
             }
         }
     }

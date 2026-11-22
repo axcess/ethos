@@ -1173,6 +1173,7 @@ impl Sim {
                 let garden = tends && p.knows(n::GARDEN);
                 let bed = tends && p.knows(n::SHELL_BED);
                 let cells = self.world.best_cells(place, 3);
+                let fatigue_k = self.cfg.world.fatigue_per_harvest;
                 let mut got = 0.0;
                 for ci in cells {
                     let cell = &mut self.world.cells[ci];
@@ -1182,6 +1183,10 @@ impl Sim {
                     let take_a = (eff * 0.5 * da).min(cell.algae);
                     cell.algae -= take_a;
                     let take_s = (eff * 0.25 * ds * if scraper { 1.6 } else { 1.0 }).min(cell.shell);
+                    if cell.algae_cap > 0.0 {
+                        cell.fatigue = (cell.fatigue + fatigue_k * take_a / cell.algae_cap * 10.0).min(1.0);
+                    }
+                    cell.harvested_today = true;
                     cell.shell -= take_s;
                     got += take_a + take_s * 1.5;
                     if garden {

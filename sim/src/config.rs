@@ -71,6 +71,12 @@ pub struct WorldCfg {
     pub herd_growth: f32,
     pub herd_max: f32,
     pub storm_bloom: f32,
+    pub fatigue_per_harvest: f32,
+    pub fatigue_effect: f32,
+    pub fatigue_rest: f32,
+    pub foul_per_person: f32,
+    pub foul_clear: f32,
+    pub crowd_disease: f32,
 }
 impl Default for WorldCfg {
     fn default() -> Self {
@@ -87,6 +93,12 @@ impl Default for WorldCfg {
             herd_growth: 0.012,
             herd_max: 30.0,
             storm_bloom: 0.6,
+            fatigue_per_harvest: 0.08,
+            fatigue_effect: 0.8,
+            fatigue_rest: 0.02,
+            foul_per_person: 0.0006,
+            foul_clear: 0.04,
+            crowd_disease: 1.0,
         }
     }
 }

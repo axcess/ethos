@@ -43,6 +43,17 @@ pub fn batch_report(rs: &[RunSummary], pops: &[Vec<u32>], title: &str, cycles: u
     writeln!(o, "- A belief spread from one originator to ≥ 6 people (\"prophet\"): {:.0}%", frac(rs, |r| r.beliefs_spread > 0) * 100.0).unwrap();
     writeln!(o, "- An anti-theft norm took hold in a camp: {:.0}%", frac(rs, |r| r.norm_camps > 0) * 100.0).unwrap();
     writeln!(o, "- A lost discovery was rediscovered: {:.0}%\n", frac(rs, |r| r.rediscoveries > 0) * 100.0).unwrap();
+    writeln!(o, "## After a boom (population ≥ 1.5× its early level)\n").unwrap();
+    writeln!(o, "| Outcome | Tanks |\n|---|---|").unwrap();
+    for (k, label) in [("none", "no boom"), ("escaped", "boomed and held (escaped)"), ("sagged", "boomed, drifted down < 30%"), ("crash", "boomed then crashed ≥ 30%"), ("crash_recovered", "crashed, then regrew past the old peak")] {
+        let n = rs.iter().filter(|r| r.boom_outcome == k).count();
+        writeln!(o, "| {label} | {n}/{} |", rs.len()).unwrap();
+    }
+    let crashes: Vec<f32> = rs.iter().filter(|r| r.boom_outcome.starts_with("crash")).map(|r| r.crash_depth).collect();
+    if !crashes.is_empty() {
+        writeln!(o, "\nMean crash depth: {:.0}% of the peak population.", crashes.iter().sum::<f32>() / crashes.len() as f32 * 100.0).unwrap();
+    }
+    writeln!(o).unwrap();
     writeln!(o, "## Metric distributions across seeds\n").unwrap();
     writeln!(o, "| Metric | mean | median | min | max |\n|---|---|---|---|---|").unwrap();
     macro_rules! row {
@@ -98,9 +109,9 @@ pub fn batch_report(rs: &[RunSummary], pops: &[Vec<u32>], title: &str, cycles: u
         }
         writeln!(o).unwrap();
     }
-    writeln!(o, "## Per-seed\n\n| seed | pop | splits | roles | languages | inventions | lost | culture-false | extinct |\n|---|---|---|---|---|---|---|---|---|").unwrap();
+    writeln!(o, "## Per-seed\n\n| seed | pop | peak | after boom | splits | roles | languages | inventions | lost | culture-false | extinct |\n|---|---|---|---|---|---|---|---|---|---|---|").unwrap();
     for r in rs {
-        writeln!(o, "| {} | {} | {} | {} | {} | {} | {} | {} | {} |", r.seed, r.final_pop, r.group_splits, r.max_roles, r.max_languages, r.inventions, r.knowledge_lost, r.culture_specific_false_max, r.extinct).unwrap();
+        writeln!(o, "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |", r.seed, r.final_pop, r.peak_pop, r.boom_outcome, r.group_splits, r.max_roles, r.max_languages, r.inventions, r.knowledge_lost, r.culture_specific_false_max, r.extinct).unwrap();
     }
     o
 }

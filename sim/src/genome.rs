@@ -51,6 +51,16 @@ pub struct Genome {
     pub lips: f32,
     pub tongue: f32,
     pub throat: f32,
+    // animal body & ecology (Phase 2): 0 = grazer of plants and mats … 1 = hunter of animals
+    #[serde(default)]
+    pub diet: f32,
+    #[serde(default)]
+    pub speed: f32,
+    #[serde(default)]
+    pub armor: f32,
+    /// preferred depth: 0 surface … 1 bottom
+    #[serde(default)]
+    pub layer: f32,
 }
 
 fn c01(x: f32) -> f32 {
@@ -93,6 +103,10 @@ impl Genome {
             lips: n(r, lineage.lips, 0.05),
             tongue: n(r, lineage.tongue, 0.05),
             throat: n(r, lineage.throat, 0.05),
+            diet: n(r, 0.4, 0.05),
+            speed: n(r, 0.5, 0.05),
+            armor: n(r, 0.2, 0.05),
+            layer: n(r, 0.8, 0.05),
         }
     }
 
@@ -130,7 +144,75 @@ impl Genome {
             lips: r.range(0.3, 1.0),
             tongue: r.range(0.3, 1.0),
             throat: r.range(0.0, 1.0),
+            diet: 0.4,
+            speed: 0.5,
+            armor: 0.2,
+            layer: 0.8,
         }
+    }
+
+    /// The first animals of a lineage, descended from a multicellular grazing strain.
+    pub fn from_strain(s: &crate::evo::StrainGenome, r: &mut Rng) -> Genome {
+        let n = |r: &mut Rng, base: f32, sd: f32| c01(base + r.normal() * sd);
+        let mut traits = [0.0; N_TRAITS];
+        for t in traits.iter_mut() {
+            *t = r.range(0.2, 0.8);
+        }
+        Genome {
+            size: n(r, s.size * 0.6, 0.05),
+            grip: n(r, 0.05, 0.03),
+            face: n(r, 0.1, 0.05),
+            hue: [s.hue, r.range(0.3, 0.8), r.range(0.3, 0.7)],
+            hard_parts: n(r, s.defense, 0.05),
+            efficiency: n(r, 0.5, 0.1),
+            temp_opt: s.temp_opt,
+            temp_tol: s.temp_tol,
+            max_age: r.range(4.0, 8.0),
+            vision: n(r, 0.2, 0.05),
+            chemo: n(r, 0.5, 0.1),
+            fertility: n(r, 0.7, 0.1),
+            parental_care: n(r, 0.05, 0.03),
+            mating_sig: [r.f32(), r.f32(), r.f32()],
+            capacity: n(r, 0.03, 0.02),
+            learning: n(r, 0.2, 0.05),
+            social_learning: n(r, 0.05, 0.03),
+            play: n(r, 0.05, 0.03),
+            sociality: n(r, 0.2, 0.1),
+            kin_bias: n(r, 0.2, 0.1),
+            dominance: n(r, 0.3, 0.1),
+            cooperation: n(r, 0.1, 0.05),
+            traits,
+            pitch: r.f32(),
+            lips: r.f32(),
+            tongue: r.f32(),
+            throat: r.f32(),
+            diet: n(r, 0.1, 0.05),
+            speed: n(r, s.motility, 0.05),
+            armor: n(r, s.defense, 0.05),
+            layer: s.layer,
+        }
+    }
+
+    /// Asexual copy with mutation (used when an animal group splits off).
+    pub fn mutant(&self, r: &mut Rng, rate: f32, sd: f32) -> Genome {
+        Genome::child(self, self, r, rate, sd)
+    }
+
+    /// Distance between two animals' genomes, for species clustering.
+    pub fn distance(&self, o: &Genome) -> f32 {
+        let d = [
+            self.diet - o.diet,
+            self.size - o.size,
+            self.speed - o.speed,
+            self.armor - o.armor,
+            self.layer - o.layer,
+            self.capacity - o.capacity,
+            self.sociality - o.sociality,
+            (self.mating_sig[0] - o.mating_sig[0]) * 2.0,
+            (self.mating_sig[1] - o.mating_sig[1]) * 2.0,
+            (self.mating_sig[2] - o.mating_sig[2]) * 2.0,
+        ];
+        libm::sqrtf(d.iter().map(|x| x * x).sum::<f32>() / d.len() as f32)
     }
 
     /// Sexual reproduction: uniform crossover by gene, then Gaussian mutation.
@@ -139,7 +221,7 @@ impl Genome {
         macro_rules! cross {
             ($($f:ident),*) => { $( if r.chance(0.5) { g.$f = b.$f; } if r.chance(rate) { g.$f = c01(g.$f + r.normal() * sd); } )* };
         }
-        cross!(size, grip, face, hard_parts, efficiency, temp_opt, temp_tol, vision, chemo, fertility, parental_care,
+        cross!(diet, speed, armor, layer, size, grip, face, hard_parts, efficiency, temp_opt, temp_tol, vision, chemo, fertility, parental_care,
                capacity, learning, social_learning, play, sociality, kin_bias, dominance, cooperation, pitch, lips, tongue, throat);
         if r.chance(0.5) {
             g.max_age = b.max_age;

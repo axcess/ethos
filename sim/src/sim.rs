@@ -455,6 +455,31 @@ impl Sim {
 
     // ---------------------------------------------------------------- events & logs
 
+    fn fauna_substeps(&mut self, n: u32) {
+        let Some(mut evo) = self.evo.take() else { return };
+        if !evo.creatures.is_empty() {
+            let fcfg = self.cfg.fauna.clone();
+            let mut fr = evo.frng.take().unwrap_or_else(|| Rng::new(2));
+            for _ in 0..n {
+                evo.fauna_step(&mut self.world, &fcfg, self.tick, 1.0 / n as f32, &mut fr);
+            }
+            evo.frng = Some(fr);
+        }
+        self.evo = Some(evo);
+    }
+
+    fn emit_fauna(&mut self, _t: u64, e: crate::fauna::FaunaEvent) {
+        use crate::fauna::FaunaEvent::*;
+        let (kind, text) = match e {
+            FirstAnimals { species, x, y } => (EvKind::EvolutionaryFirst, format!("The first animals: a mat of grazing cells becomes swimming creatures (species A{species}) at the {}", self.place_name(place_of(x, y)))),
+            NewSpecies { species, parent, what } => (EvKind::Speciation, format!("A new animal species A{species} ({what}) branches off from A{}", parent.unwrap_or(0))),
+            Extinct { species, what, days } => (EvKind::SpeciesExtinct, format!("Animal species A{species} ({what}) dies out after {days} days")),
+            FirstHunter { species } => (EvKind::EvolutionaryFirst, format!("The first hunters: species A{species} lives by eating other animals")),
+            Cleverest { species, capacity } => (EvKind::EvolutionaryFirst, format!("A new height of intelligence: species A{species} reaches capacity {capacity:.2}")),
+        };
+        self.emit(kind, vec![], 0, text);
+    }
+
     fn emit_evo(&mut self, _t: u64, e: crate::evo::EvoEvent) {
         use crate::evo::EvoEvent::*;
         let (kind, place, text) = match e {
@@ -523,8 +548,9 @@ impl Sim {
     }
 
     pub fn step(&mut self) {
-        // deep time: with no animals or people, only the daily world update matters
+        // deep time: with no people, the world advances a day at a time (animals in 4 sub-steps)
         if self.evo.is_some() && self.alive.is_empty() {
+            self.fauna_substeps(4);
             let next_day = (self.tick / self.tpd() + 1) * self.tpd();
             self.tick = next_day;
             self.new_day();
@@ -632,6 +658,16 @@ impl Sim {
         if let Some(mut evo) = self.evo.take() {
             let ecfg = self.cfg.evolution.clone();
             evo.daily(&mut self.world, &ecfg, self.tick, day);
+            let fcfg = self.cfg.fauna.clone();
+            let mut fr = evo.frng.take().unwrap_or_else(|| Rng::new(2));
+            evo.animal_origins(&fcfg, self.tick, &mut fr);
+            if day % 12 == 6 {
+                evo.fauna_species(&fcfg, self.tick);
+            }
+            evo.frng = Some(fr);
+            for (t, e) in std::mem::take(&mut evo.fauna_events) {
+                self.emit_fauna(t, e);
+            }
             for (t, e) in std::mem::take(&mut evo.events) {
                 self.emit_evo(t, e);
             }

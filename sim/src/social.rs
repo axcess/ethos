@@ -294,6 +294,8 @@ pub fn era_label(sim: &Sim) -> String {
         Some(e) => {
             if !sim.alive.is_empty() {
                 "minds".into()
+            } else if !e.creatures.is_empty() {
+                "biological".into()
             } else if e.live_strains() == 0 {
                 if e.life_began.is_some() { "dead".into() } else { "lifeless".into() }
             } else {
@@ -766,6 +768,16 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
         max_multicell: sim.evo.as_ref().map_or(0.0, |e| e.strains.iter().filter(|s| s.extinct.is_none() && s.biomass > 1.0).map(|s| s.g.multicell).fold(0.0, f32::max)),
         max_size: sim.evo.as_ref().map_or(0.0, |e| e.strains.iter().filter(|s| s.extinct.is_none() && s.biomass > 1.0).map(|s| s.g.size).fold(0.0, f32::max)),
         kinds: sim.evo.as_ref().map_or(0, |e| e.kinds_seen.len() as u32),
+        animals: sim.evo.as_ref().map_or(0.0, |e| e.creatures.iter().map(|c| c.m).sum()),
+        animal_agents: sim.evo.as_ref().map_or(0, |e| e.creatures.len() as u32),
+        animal_species: sim.evo.as_ref().map_or(0, |e| e.animal_species.iter().filter(|s| s.extinct.is_none()).count() as u32),
+        animal_species_ever: sim.evo.as_ref().map_or(0, |e| e.animal_species.len() as u32),
+        max_capacity: sim.evo.as_ref().map_or(0.0, |e| e.creatures.iter().map(|c| c.g.capacity).fold(0.0, f32::max)),
+        mean_capacity: sim.evo.as_ref().map_or(0.0, |e| {
+            let w: f32 = e.creatures.iter().map(|c| c.m).sum();
+            if w > 0.0 { e.creatures.iter().map(|c| c.g.capacity * c.m).sum::<f32>() / w } else { 0.0 }
+        }),
+        max_diet: sim.evo.as_ref().map_or(0.0, |e| e.creatures.iter().filter(|c| c.m > 5.0).map(|c| c.g.diet).fold(0.0, f32::max)),
         believed_groups: believed,
         mean_identity: if id_n > 0 { id_sum / id_n as f32 } else { 0.0 },
         identity_agreement: if agree_n > 0 { agree_sum / agree_n as f32 } else { 0.0 },

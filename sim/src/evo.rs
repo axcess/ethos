@@ -184,6 +184,14 @@ pub struct Evo {
     /// (tick, living species) samples, for detecting collapses in diversity
     pub diversity: Vec<(u64, u32)>,
     pub rng: Option<Rng>,
+    pub creatures: Vec<crate::fauna::Creature>,
+    pub animal_species: Vec<crate::fauna::AnimalSpecies>,
+    pub next_creature: u32,
+    pub animals_began: Option<u64>,
+    pub fauna_events: Vec<(u64, crate::fauna::FaunaEvent)>,
+    pub first_hunter_seen: bool,
+    pub cleverest_mark: f32,
+    pub frng: Option<Rng>,
     /// Slots of extinct strains, reused so the table stays bounded.
     pub free: Vec<u32>,
     pub live: usize,
@@ -204,6 +212,7 @@ impl Evo {
             macro_photo: vec![0.0; n],
             macro_filter: vec![0.0; n],
             rng: Some(Rng::stream(seed, 9, 0)),
+            frng: Some(Rng::stream(seed, 10, 0)),
             ..Default::default()
         }
     }
@@ -383,36 +392,51 @@ impl Evo {
                 let total: f32 = self.pop[idx].iter().map(|e| e.1).sum();
                 let room = (1.0 - total / cfg.layer_capacity).max(-0.5);
                 let nut = lay.nutrient / (lay.nutrient + 0.5);
-                // grazers eat the others, weighted by how edible they are
-                let edible: f32 = self.pop[idx].iter().map(|(s, b)| b * (1.0 - 0.7 * self.strains[*s as usize].g.defense) * (1.0 - 0.5 * self.strains[*s as usize].g.size)).sum();
-                let mut grazed_total = 0.0f32;
-                let mut changes: Vec<f32> = Vec::with_capacity(self.pop[idx].len());
+                // effective body size needs multicellularity; a grazer can only eat what it is big
+                // enough to eat, so prey and grazers are drawn into an arms race of size
+                let ents: Vec<(u32, f32, StrainGenome)> = self.pop[idx].iter().map(|&(s, b)| (s, b, self.strains[s as usize].g)).collect();
+                let es = |g: &StrainGenome| g.size * (0.3 + 0.7 * g.multicell);
+                let n_e = ents.len();
+                // edible[a][b]: how much of b grazer a can eat
+                let mut eat = [[0.0f32; SLOTS + 1]; SLOTS + 1];
+                for a in 0..n_e {
+                    for b in 0..n_e {
+                        if a != b {
+                            let (ga, gb) = (&ents[a].2, &ents[b].2);
+                            let fit = (0.5 + (es(ga) - es(gb)) * 1.5).clamp(0.05, 1.0);
+                            eat[a][b] = ents[b].1 * (1.0 - 0.7 * gb.defense) * fit;
+                        }
+                    }
+                }
+                let mut changes: Vec<f32> = vec![0.0; n_e];
+                let mut losses: Vec<f32> = vec![0.0; n_e];
                 let mut nutrient_used = 0.0f32;
-                for &(s, b) in &self.pop[idx] {
-                    let g = &self.strains[s as usize].g;
+                for a in 0..n_e {
+                    let (_, b, g) = (ents[a].0, ents[a].1, ents[a].2);
                     let z = (lay.temp - temp_c(g.temp_opt)) / (2.0 + 10.0 * g.temp_tol);
                     let tf = libm::expf(-z * z);
                     let oxy = if g.graze > 0.3 { (lay.oxygen * 1.5).min(1.0) } else { 1.0 };
                     // multicellular producers shade out and outcompete thin films for light
                     let photo = g.photo * lay.light * nut * (0.7 + 0.6 * g.multicell);
                     let chemo = g.chemo * (vent * 0.15).min(1.0);
-                    let prey = ((edible - b) / (edible + 5.0)).max(0.0);
-                    let graze = g.graze * prey * (0.6 + 0.8 * g.size) * oxy;
+                    let avail: f32 = (0..n_e).map(|o| eat[a][o]).sum();
+                    let prey = avail / (avail + 5.0);
+                    let graze = g.graze * prey * (0.6 + 0.8 * es(&g)) * oxy;
                     // light and vent energy need room to grow into; grazing eats what is there and makes room
                     let gain = cfg.growth * b * tf * ((photo + chemo) * room.max(0.0) + graze);
-                    let upkeep = b * (0.03 + 0.04 * g.size + 0.03 * g.multicell + 0.02 * g.motility + 0.02 * g.defense + 0.01 * g.temp_tol);
-                    grazed_total += cfg.growth * b * tf * graze;
+                    let upkeep = b * (0.03 + 0.02 * g.size + 0.07 * g.size * g.size + 0.02 * g.multicell + 0.04 * g.multicell * g.multicell + 0.02 * g.motility + 0.02 * g.defense + 0.01 * g.temp_tol);
+                    let eaten = cfg.growth * b * tf * graze * 1.3;
+                    if avail > 0.0 {
+                        for o in 0..n_e {
+                            losses[o] += eaten * eat[a][o] / avail;
+                        }
+                    }
                     nutrient_used += cfg.growth * b * tf * photo * 0.05;
-                    changes.push(gain - upkeep - if room < 0.0 { b * (-room) * 0.2 } else { 0.0 });
+                    changes[a] = gain - upkeep - if room < 0.0 { b * (-room) * 0.2 } else { 0.0 };
                 }
-                // grazing removes biomass from the edible, in proportion
-                let edible_sum = edible.max(1e-4);
                 let mut dead = 0.0f32;
-                for (n, &(s, b)) in self.pop[idx].iter().enumerate() {
-                    let g = &self.strains[s as usize].g;
-                    let share = b * (1.0 - 0.7 * g.defense) * (1.0 - 0.5 * g.size) / edible_sum;
-                    let loss = (grazed_total * 1.3 * share).min(b * 0.9);
-                    changes[n] -= loss;
+                for o in 0..n_e {
+                    changes[o] -= losses[o].min(ents[o].1 * 0.9);
                 }
                 let lay_mut = &mut self.layers[i][k];
                 lay_mut.nutrient = (lay_mut.nutrient - nutrient_used).max(0.0);

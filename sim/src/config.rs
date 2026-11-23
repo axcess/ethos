@@ -16,6 +16,7 @@ pub struct Config {
     pub language: LanguageCfg,
     pub observer: ObserverCfg,
     pub evolution: crate::evo::EvolutionCfg,
+    pub fauna: crate::fauna::FaunaCfg,
 }
 
 impl Default for Config {
@@ -33,6 +34,7 @@ impl Default for Config {
             language: LanguageCfg::default(),
             observer: ObserverCfg::default(),
             evolution: crate::evo::EvolutionCfg::default(),
+            fauna: crate::fauna::FaunaCfg::default(),
         }
     }
 }

@@ -7,6 +7,7 @@ pub mod decide;
 pub mod discovery;
 pub mod events;
 pub mod evo;
+pub mod fauna;
 pub mod export;
 pub mod genome;
 pub mod language;

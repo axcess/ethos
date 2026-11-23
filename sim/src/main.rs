@@ -144,8 +144,8 @@ fn cmd_run(args: &Args) {
             last_report = sim.cycle();
             if let (Some(s), true) = (sim.stats.last(), sim.evo.is_some() && sim.alive.is_empty()) {
                 eprintln!(
-                    "cycle {:>4} (Chicago {}) {:<10} strains {:>4} species {:>3} (ever {:>4}) kinds {} biomass {:>7.0} multicell {:.2} size {:.2}",
-                    s.cycle, s.real_year, s.era, s.live_strains, s.live_species, s.species_ever, s.kinds, s.biomass, s.max_multicell, s.max_size
+                    "cycle {:>4} {:<10} species {:>3} (ever {:>4}) kinds {} multicell {:.2} size {:.2} | animals {:>6.0} in {:>4} groups, {:>2} spp (ever {:>3}) cap max {:.2} mean {:.2} diet max {:.2}",
+                    s.cycle, s.era, s.live_species, s.species_ever, s.kinds, s.max_multicell, s.max_size, s.animals, s.animal_agents, s.animal_species, s.animal_species_ever, s.max_capacity, s.mean_capacity, s.max_diet
                 );
             } else if let Some(s) = sim.stats.last() {
                 eprintln!(

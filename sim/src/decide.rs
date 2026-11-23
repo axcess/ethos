@@ -289,7 +289,8 @@ impl Sim {
             let q_h = 1.0 - q.energy;
             if q_h > 0.55 {
                 let kin_w = if k != kin::NONE { p.genome.kin_bias } else { 0.0 };
-                let deserve = kin_w + aff.clamp(-1.0, 1.0) * 0.5 + p.genome.cooperation * 0.4 - grudge;
+                let (us_w, _) = self.us_them(i, o as usize);
+                let deserve = kin_w + aff.clamp(-1.0, 1.0) * 0.5 + p.genome.cooperation * 0.4 + us_w * 0.2 - grudge;
                 if hungry_other.map_or(true, |h| deserve > h.1) {
                     hungry_other = Some((o, deserve, q_h));
                     share_why = (kin_w, aff.clamp(0.0, 1.0));
@@ -367,7 +368,9 @@ impl Sim {
                     let aff = m.model(o).map_or(0.0, |mm| mm.affinity);
                     let refused = p.mind.episodes.iter().filter(|e| e.kind == EpKind::WasRefused && tick.saturating_sub(e.tick) < 4 * self.tpd()).count() as f32;
                     let grudge_o = m.model(o).map_or(0.0, |mm| mm.grudge);
-                    let u = hunger * 0.95 + tr[3] * 0.35 + refused.min(3.0) * 0.15 + grudge_o * 0.3 - p.genome.cooperation * 0.3 - norm_steal * (0.4 + tr[5] * 0.8) - aff.max(0.0) * 0.5 - (others.len() as f32 * 0.02) - q.genome.dominance * 0.15 - 0.3;
+                    let (us_o, them_o) = self.us_them(i, o as usize);
+                    let norm_here = norm_steal * (1.0 - 0.5 * them_o) + us_o * 0.15;
+                    let u = hunger * 0.95 + tr[3] * 0.35 + refused.min(3.0) * 0.15 + grudge_o * 0.3 - p.genome.cooperation * 0.3 - norm_here * (0.4 + tr[5] * 0.8) - aff.max(0.0) * 0.5 - (others.len() as f32 * 0.02) - q.genome.dominance * 0.15 - 0.3;
                     cands.push(c(Act::Steal { who: o }, u, &[(why::DESPERATE, hunger + refused * 0.15), (why::GRUDGE, grudge_o), (why::NORM, -norm_steal)]));
                 }
             }
@@ -385,7 +388,8 @@ impl Sim {
             if adult {
                 let them = &self.people[o as usize];
                 let fear_them = m.model(o).map_or(0.0, |mm| mm.fear);
-                let u = anger * 0.6 + w * 0.5 + tr[3] * 0.3 + tr[5] * norm_steal * 0.2 + standing * 0.35 - them.genome.dominance * 0.25 - fear * 0.2 - fear_them * 0.4 - tr[4] * 0.2 - 0.3;
+                let (_, outsider) = self.us_them(i, o as usize);
+                let u = anger * 0.6 + w * 0.5 + tr[3] * 0.3 + tr[5] * norm_steal * 0.2 + standing * 0.35 + outsider * 0.2 - them.genome.dominance * 0.25 - fear * 0.2 - fear_them * 0.4 - tr[4] * 0.2 - 0.3;
                 let mut cc = c(Act::Punish { who: o }, u, &[(why::GRUDGE, w), (why::ANGER, anger), (why::NORM, norm_steal)]);
                 cc.saw = (saw::THIEF, o);
                 cands.push(cc);
@@ -556,7 +560,8 @@ impl Sim {
         }
         let danger = m.places[camp.place as usize].danger;
         let lost_leader = m.beliefs.iter().any(|b| b.rel == Rel::Leads && b.conf > 0.3 && matches!(b.subject, Concept::Person(x) if !self.people[x as usize].alive));
-        let d = if lost_leader { 0.3 } else { 0.0 } + 0.45 * crowd + 0.35 * scarcity + 0.5 * conflict + 0.25 * danger - (ties * 0.05).min(0.5);
+        let loyalty = m.identity.filter(|(c, _)| *c == h).map_or(0.0, |(_, s)| s);
+        let d = if lost_leader { 0.3 } else { 0.0 } - loyalty * 0.3 + 0.45 * crowd + 0.35 * scarcity + 0.5 * conflict + 0.25 * danger - (ties * 0.05).min(0.5);
         let u = d * 1.3 + m.traits[0] * 0.25 - 0.55;
         if u < 0.0 {
             return None;
@@ -775,6 +780,8 @@ impl Sim {
             }
         }
         let leads = self.people[j].mind.belief(Concept::Person(iid), Rel::Leads);
+        let (us, them) = self.us_them(j, i);
+        u += us * 0.25 - them * 0.2 * (0.5 + self.people[j].mind.traits[5]);
         let u = u + leads * 0.3 + self.people[j].rng.normal() * self.cfg.mind.noise;
         let ok = u > 0.0;
         if ok && matches!(req, Req::Hunt | Req::Migrate) {
@@ -949,6 +956,11 @@ impl Sim {
                     self.people[mi].carried += share;
                     self.counters.food_hunted += share;
                     self.people[mi].skill_hunt = (self.people[mi].skill_hunt + 0.04).min(1.0);
+                    if let Some((c, s)) = self.people[mi].mind.identity {
+                        if present.iter().filter(|&&o| self.people[o as usize].home == Some(c)).count() >= 2 {
+                            self.people[mi].mind.identity = Some((c, (s + 0.03).min(1.0)));
+                        }
+                    }
                     self.use_know(mi, n::SPEAR);
                     self.use_know(mi, n::LURE);
                     self.demonstrate(mi, n::SPEAR);

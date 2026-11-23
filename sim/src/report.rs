@@ -76,6 +76,8 @@ pub fn batch_report(rs: &[RunSummary], pops: &[Vec<u32>], title: &str, cycles: u
     row!("groups formed", |r: &RunSummary| r.groups_formed as f32);
     row!("group splits", |r: &RunSummary| r.group_splits as f32);
     row!("camps founded", |r: &RunSummary| r.camps_founded as f32);
+    row!("believed communities (max)", |r: &RunSummary| r.max_believed_groups as f32);
+    row!("detected groups agreeing on one identity", |r: &RunSummary| r.mean_identity_agreement);
     row!("max distinct roles", |r: &RunSummary| r.max_roles as f32);
     row!("mean belief diversity (Jaccard)", |r: &RunSummary| r.mean_belief_diversity);
     row!("culture-specific wrong beliefs (max)", |r: &RunSummary| r.culture_specific_false_max as f32);

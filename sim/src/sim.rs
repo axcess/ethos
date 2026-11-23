@@ -319,6 +319,22 @@ impl Sim {
         }
     }
 
+    /// How strongly `i` sees `j` as one of "us" (0..1), and as one of "them" (0..1).
+    pub fn us_them(&self, i: usize, j: usize) -> (f32, f32) {
+        match self.people[i].mind.identity {
+            Some((camp, s)) => {
+                if self.people[j].home == Some(camp) {
+                    (s, 0.0)
+                } else if self.people[j].home.is_some() {
+                    (0.0, s)
+                } else {
+                    (0.0, s * 0.5)
+                }
+            }
+            None => (0.0, 0.0),
+        }
+    }
+
     pub fn kin_between(&self, a: u32, b: u32) -> u8 {
         let (pa, pb) = (&self.people[a as usize], &self.people[b as usize]);
         if pa.mate == Some(b) {
@@ -1169,6 +1185,7 @@ impl Sim {
             }
             self.try_conceive(i, adult, age);
             self.people[i].prestige *= 0.985;
+            self.update_identity(i, tick);
             // beliefs fade unless reinforced; hearsay and superstition fade faster
             {
                 let m = &mut self.people[i].mind;
@@ -1521,6 +1538,51 @@ impl Sim {
     }
 
     // ---------------------------------------------------------------- knowledge
+
+    /// Identity grows from living among camp-mates one likes, under a shared name; it fades
+    /// when one moves away, and a new one takes its place.
+    fn update_identity(&mut self, i: usize, tick: u64) {
+        let _ = tick;
+        let adult = self.adult(i);
+        let home = self.people[i].home;
+        let p = &self.people[i];
+        if !p.mind.caps.language || !adult {
+            return;
+        }
+        let liking = match home {
+            Some(h) => {
+                let (mut n, mut sum) = (0, 0.0f32);
+                for md in &p.mind.models {
+                    let q = &self.people[md.who as usize];
+                    if q.alive && q.home == Some(h) {
+                        n += 1;
+                        sum += md.affinity.max(0.0) + if md.kin != kin::NONE { 0.3 } else { 0.0 };
+                    }
+                }
+                if n > 0 { (sum / n as f32).min(1.0) } else { 0.0 }
+            }
+            None => 0.0,
+        };
+        let named = home.map_or(false, |h| p.mind.lex.best(&Concept::Camp(h)).is_some());
+        let m = &mut self.people[i].mind;
+        m.identity = match (m.identity, home) {
+            (Some((c, s)), Some(h)) if c == h => {
+                let grow = if named { 0.004 + 0.02 * liking } else { 0.0 };
+                Some((c, (s + grow - 0.002).clamp(0.0, 1.0)))
+            }
+            (Some((c, s)), Some(h)) => {
+                // living elsewhere: the old allegiance fades until the new home takes over
+                let s2 = s * 0.97;
+                if s2 < 0.15 { Some((h, 0.1)) } else { Some((c, s2)) }
+            }
+            (Some((c, s)), None) => {
+                let s2 = s * 0.98;
+                if s2 < 0.05 { None } else { Some((c, s2)) }
+            }
+            (None, Some(h)) => Some((h, 0.1)),
+            (None, None) => None,
+        };
+    }
 
     /// Successful use of a material is evidence against it being cursed.
     pub fn disconfirm_curse(&mut self, i: usize, mats: u16) {

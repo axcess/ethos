@@ -100,6 +100,9 @@ pub struct CycleStats {
     pub behavior_entropy: f32,
     pub behavior_divergence: f32,
     pub change_index: f32,
+    pub believed_groups: u32,
+    pub mean_identity: f32,
+    pub identity_agreement: f32,
     pub mean_fatigue: f32,
     pub max_foul: f32,
     pub decisions: u64,
@@ -156,6 +159,8 @@ pub struct RunSummary {
     pub real_years: Vec<u32>,
     pub activity_share: Vec<(String, f32)>,
     /// none | crash | crash_recovered | escaped | sagged
+    pub max_believed_groups: u32,
+    pub mean_identity_agreement: f32,
     pub boom_outcome: String,
     pub boom_cycle: Option<u64>,
     pub crash_cycle: Option<u64>,
@@ -276,6 +281,9 @@ pub fn summarize(sim: &crate::sim::Sim, scenario: &str, wall: f64) -> RunSummary
     let mut v: Vec<(String, f32)> = (0..crate::person::N_ACT).map(|k| (crate::person::ACT_NAMES[k].to_string(), (tot[k] as f32 / sum as f32 * 1000.0).round() / 10.0)).collect();
     v.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     r.activity_share = v;
+    r.max_believed_groups = s.iter().map(|c| c.believed_groups).max().unwrap_or(0);
+    let late: Vec<f32> = s.iter().skip(s.len() / 2).map(|c| c.identity_agreement).collect();
+    r.mean_identity_agreement = late.iter().sum::<f32>() / late.len().max(1) as f32;
     let pops: Vec<u32> = s.iter().map(|c| c.pop).collect();
     let (o, bc, cc, d) = classify_boom(&pops);
     r.boom_outcome = o;

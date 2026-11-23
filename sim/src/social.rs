@@ -56,6 +56,7 @@ pub struct Observer {
     pub spread_beliefs: Vec<u64>,
     pub prev_pop: u32,
     pub languages: Vec<LanguageInfo>,
+    pub named_camps: Vec<u16>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -483,6 +484,57 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
         }
     }
 
+    // ---------- believed communities: camps whose members mostly see themselves as its people
+    let mut believed = 0u32;
+    let mut id_sum = 0.0f32;
+    let mut id_n = 0u32;
+    let mut newly_named: Vec<(u16, String, u32)> = Vec::new();
+    for c in sim.world.camps.iter().filter(|c| c.abandoned.is_none()) {
+        let members: Vec<u32> = adults.iter().copied().filter(|&a| sim.people[a as usize].home == Some(c.id)).collect();
+        let strong = members.iter().filter(|&&a| matches!(sim.people[a as usize].mind.identity, Some((cc, s)) if cc == c.id && s > 0.5)).count();
+        if members.len() >= 4 && strong * 2 >= members.len() {
+            believed += 1;
+            if !sim.obs.named_camps.contains(&c.id) {
+                let mut forms: BTreeMap<Form, u32> = BTreeMap::new();
+                for &a in &members {
+                    if let Some(f) = sim.people[a as usize].mind.lex.best(&Concept::Camp(c.id)) {
+                        *forms.entry(f.clone()).or_default() += 1;
+                    }
+                }
+                let name = modal_form(&forms).map(|(f, _)| crate::language::name_case(f)).unwrap_or_else(|| sim.camp_name(c.id));
+                newly_named.push((c.id, name, members.len() as u32));
+            }
+        }
+    }
+    for &a in &adults {
+        if let Some((_, s)) = sim.people[a as usize].mind.identity {
+            id_sum += s;
+            id_n += 1;
+        }
+    }
+    // do detected groups match what their members believe? (share of each group agreeing on one identity)
+    let mut agree_sum = 0.0f32;
+    let mut agree_n = 0u32;
+    for g in &sim.obs.groups {
+        let mut by: BTreeMap<u16, u32> = BTreeMap::new();
+        for &m in &g.members {
+            if let Some((c, s)) = sim.people[m as usize].mind.identity {
+                if s > 0.3 {
+                    *by.entry(c).or_default() += 1;
+                }
+            }
+        }
+        if let Some(top) = by.values().max() {
+            agree_sum += *top as f32 / g.members.len() as f32;
+            agree_n += 1;
+        }
+    }
+    for (cid, name, n) in newly_named {
+        sim.obs.named_camps.push(cid);
+        let place = sim.world.camps[cid as usize].place;
+        sim.emit(EvKind::CommunityNamed, vec![], place, format!("The {n} adults of {name} now think of themselves as one people: the {name}-folk"));
+    }
+
     // ---------- language
     let mut comms: Vec<(u32, Vec<u32>)> = sim.obs.groups.iter().filter(|g| g.members.len() >= 5).map(|g| (g.id, g.members.clone())).collect();
     if comms.is_empty() {
@@ -690,6 +742,9 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
         behavior_entropy: h_mean,
         behavior_divergence: divergence,
         change_index: change,
+        believed_groups: believed,
+        mean_identity: if id_n > 0 { id_sum / id_n as f32 } else { 0.0 },
+        identity_agreement: if agree_n > 0 { agree_sum / agree_n as f32 } else { 0.0 },
         mean_fatigue: {
             let v: Vec<f32> = sim.world.cells.iter().filter(|c| c.algae_cap > 0.0).map(|c| c.fatigue).collect();
             v.iter().sum::<f32>() / v.len().max(1) as f32

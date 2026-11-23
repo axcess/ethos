@@ -323,6 +323,8 @@ impl Caps {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Mind {
     pub caps: Caps,
+    /// Group identity: "I am one of the people of camp X", and how strongly (DESIGN §8.3).
+    pub identity: Option<(u16, f32)>,
     pub drives: [f32; N_DRIVES],
     pub traits: [f32; N_TRAITS],
     pub base_traits: [f32; N_TRAITS],
@@ -344,6 +346,7 @@ impl Mind {
     pub fn new(traits: [f32; N_TRAITS], caps: Caps) -> Mind {
         Mind {
             caps,
+            identity: None,
             drives: [0.2; N_DRIVES],
             traits,
             base_traits: traits,

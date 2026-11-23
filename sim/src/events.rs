@@ -32,6 +32,7 @@ pub enum EvKind {
     ClimateExtreme,
     Famine,
     Extinction,
+    CommunityNamed,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -77,6 +78,7 @@ impl EvKind {
             ClimateExtreme => 0.5,
             Famine => 0.7,
             Extinction => 1.0,
+            CommunityNamed => 0.5,
         }
     }
 }

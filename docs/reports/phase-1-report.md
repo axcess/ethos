@@ -1,5 +1,7 @@
 # Phase 1 Report: Headless Minds Engine
 
+> **Superseded in part.** See `phase-1-audit.md` for current status and the completion checklist. Numbers in the first section predate the shellfish food bug fix.
+
 **Date:** 2026-11-21 · **Status:** stopped at a checkpoint for your review (not yet complete; see "Not done")
 
 ## What exists

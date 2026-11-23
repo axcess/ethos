@@ -7,7 +7,7 @@ with your approval.
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Design document | Approved |
-| 1 | Headless Minds Engine | **In review** (4/5 exit criteria; see reports/phase-1-report.md) |
+| 1 | Headless Minds Engine | **In progress**: completion checklist in reports/phase-1-audit.md (must be fully checked before Phase 2) |
 | 2 | Full evolutionary arc (headless) | Not started |
 | 3 | Civilization (headless) | Not started |
 | 4 | Renderer and assets | Not started |
@@ -54,6 +54,7 @@ size/coherence/grammar tier and inter-group intelligibility; **behavior entropy*
 - Each scenario test produces a qualitatively different response from baseline.
 
 ## Phase 2: Full evolutionary arc
+**Gate:** starts only after every "must have" in `reports/phase-1-audit.md` is checked and you have signed off.
 **Scope:** chemistry fields, strains, super-individual organisms, genome evolution, speciation detection,
 capacity-scaled minds for animals, fossils + strata, storyteller, era detection, end conditions.
 **Exit:** across ≥ 200 seeds, era-reach distribution within ±50% of DESIGN §21 targets; speciation and mass

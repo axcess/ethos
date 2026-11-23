@@ -68,6 +68,7 @@
   </div>
   <aside>
     <section id="inspector"><h2>Inspector</h2><div class="meta">Click a person (dot) on the map.</div></section>
+    <section><h2>Population <span id="popnow" style="text-transform:none;letter-spacing:0;color:var(--ink)"></span></h2><canvas id="chart" style="width:100%;height:84px;cursor:pointer"></canvas></section>
     <section><h2>Legend</h2><div id="legend"></div></section>
     <section style="flex:1; display:flex; flex-direction:column; min-height:0; border-bottom:0">
       <h2>Events</h2><div id="events"></div>
@@ -80,6 +81,8 @@
     <input type="range" id="scrub" min="0" max="0" value="0">
     <label>colour <select id="colorBy"><option value="group">group</option><option value="camp">camp</option><option value="culture">culture</option><option value="act">action</option><option value="role">role</option></select></label>
     <label><input type="checkbox" id="bubbles" checked> thoughts</label>
+    <label title="keep the selected person centred (F)"><input type="checkbox" id="follow"> follow</label>
+    <button id="resetView" title="reset zoom (0)">⤢ fit</button>
     <label><input type="checkbox" id="food" checked> food</label>
   </footer>
 </div>
@@ -107,7 +110,7 @@
     campsById = new Map(D.camps.map(c => [c.id, c]));
     $('scrub').max = D.frames.length - 1;
     $('drop').style.display = 'none';
-    buildLegend(); renderEvents(); resize(); draw();
+    vx = 0; buildLegend(); renderEvents(); resize(); resetView(); draw();
   }
   $('file').onchange = e => { const f = e.target.files[0]; if (f) f.text().then(t => load(JSON.parse(t))); };
   if (window.TANK_DATA) { const d = window.TANK_DATA; window.TANK_DATA = null; setTimeout(() => load(d), 0); }
@@ -118,15 +121,23 @@
     const rel = t - D.tick0, day = Math.floor(rel / D.tpd), h = ((rel % D.tpd) / D.tpd * 24 + 6) % 24;
     return `c${Math.floor(day / D.dpc)} d${String(day % D.dpc).padStart(2, '0')} ${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`;
   }
-  let scale = 1, ox = 0, oy = 0;
+  // view: fit-to-window scale × zoom, centred on (vx, vy) in tank units
+  let scale = 1, ox = 0, oy = 0, fit = 1, zoom = 1, vx = 0, vy = 0, cw = 0, ch = 0;
+  function applyView() {
+    scale = fit * zoom; ox = cw / 2 - vx * scale; oy = ch / 2 - vy * scale;
+  }
+  function resetView() { if (!D) return; zoom = 1; vx = D.w * D.cell / 2; vy = D.h * D.cell / 2; applyView(); }
   function resize() {
     const r = cv.parentElement.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
     cv.width = r.width * dpr; cv.height = r.height * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cw = r.width; ch = r.height;
     if (!D) return;
     const W = D.w * D.cell, H = D.h * D.cell;
-    scale = Math.min(r.width / W, r.height / H) * 0.97;
-    ox = (r.width - W * scale) / 2; oy = (r.height - H * scale) / 2;
+    fit = Math.min(r.width / W, r.height / H) * 0.97;
+    if (!vx) { vx = W / 2; vy = H / 2; }
+    applyView();
+    drawChart();
   }
   window.addEventListener('resize', () => { resize(); draw(); });
   const X = x => ox + x * scale, Y = y => oy + y * scale;
@@ -166,6 +177,10 @@
     ctx.clearRect(0, 0, r.width, r.height);
     if (!D) return;
     const f = D.frames[fi], nf = D.frames[Math.min(fi + 1, D.frames.length - 1)];
+    if ($('follow').checked && sel !== null) {
+      const k = f.p.findIndex((v, idx) => idx % 8 === 0 && v === sel);
+      if (k >= 0) { vx += (f.p[k + 1] / 10 - vx) * 0.25; vy += (f.p[k + 2] / 10 - vy) * 0.25; if (zoom < 2.5) zoom = 2.5; applyView(); }
+    }
     // terrain
     for (let y = 0; y < D.h; y++) for (let x = 0; x < D.w; x++) {
       const i = y * D.w + x; ctx.fillStyle = HAB[D.hab[i]];
@@ -208,14 +223,18 @@
     let selPos = null;
     for (let i = 0; i < P.length; i += 8) {
       const id = P[i], x = X(P[i + 1] / 10), y = Y(P[i + 2] / 10), child = P[i + 6] & 2, sick = P[i + 6] & 1;
-      ctx.beginPath(); ctx.arc(x, y, (child ? 1.6 : 2.6) * Math.max(1, scale), 0, 7);
+      ctx.beginPath(); ctx.arc(x, y, (child ? 1.6 : 2.6) * Math.min(Math.max(1, scale), 3.5), 0, 7);
       ctx.fillStyle = personColor(P.slice(i, i + 8), mode); ctx.fill();
       if (sick) { ctx.strokeStyle = '#ff6'; ctx.lineWidth = 1; ctx.stroke(); }
       if (sel === id) selPos = [x, y];
+      if (scale > 4.5) {
+        const pp = peopleById.get(id);
+        if (pp) { ctx.font = '10px system-ui'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(230,240,242,0.85)'; ctx.fillText(pp.name, x, y + 13); }
+      }
     }
     // gulpers
     for (let i = 0; i < f.g.length; i += 2) {
-      const x = X(f.g[i] / 10), y = Y(f.g[i + 1] / 10), s = 5 * Math.max(1, scale * 0.8);
+      const x = X(f.g[i] / 10), y = Y(f.g[i + 1] / 10), s = 5 * Math.min(Math.max(1, scale * 0.8), 3);
       ctx.fillStyle = '#ff4f4f'; ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s, y + s); ctx.lineTo(x - s, y + s); ctx.closePath(); ctx.fill();
     }
     // ridge marker
@@ -243,9 +262,44 @@
       `<span>ice <b>${Math.round(f.climate[3] * 100)}%</b></span><span>people <b>${alive}</b></span><span>camps <b>${f.c.length / 4}</b></span>` +
       `<span>gulpers <b>${f.g.length / 2}</b></span><span>frame <b>${fi + 1}/${D.frames.length}</b></span>`;
     $('scrub').value = fi;
+    drawChartMarker();
     highlightEvents(f.t);
     if (sel !== null) inspect(sel, false);
   }
+
+  // population chart (people and camps per frame), click to jump
+  const chart = $('chart'), cctx = chart.getContext('2d');
+  let chartBase = null;
+  function drawChart() {
+    if (!D) return;
+    const dpr = window.devicePixelRatio || 1, w = chart.clientWidth, h = chart.clientHeight;
+    chart.width = w * dpr; chart.height = h * dpr; cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const pops = D.frames.map(f => f.p.length / 8), camps = D.frames.map(f => f.c.length / 4);
+    const maxP = Math.max(1, ...pops), maxC = Math.max(1, ...camps), n = pops.length;
+    cctx.clearRect(0, 0, w, h);
+    const line = (arr, mx, col) => {
+      cctx.strokeStyle = col; cctx.lineWidth = 1.5; cctx.beginPath();
+      arr.forEach((v, i) => { const x = i / Math.max(1, n - 1) * w, y = h - 4 - v / mx * (h - 12); i ? cctx.lineTo(x, y) : cctx.moveTo(x, y); });
+      cctx.stroke();
+    };
+    line(camps, maxC * 1.15, 'rgba(226,194,106,0.7)');
+    line(pops, maxP * 1.05, '#5ec8d8');
+    cctx.fillStyle = '#7d959c'; cctx.font = '10px system-ui';
+    cctx.fillText(`peak ${maxP} people`, 4, 10); cctx.fillStyle = 'rgba(226,194,106,0.9)'; cctx.fillText(`camps (max ${maxC})`, w - 82, 10);
+    chartBase = cctx.getImageData(0, 0, chart.width, chart.height);
+  }
+  function drawChartMarker() {
+    if (!chartBase) return;
+    cctx.putImageData(chartBase, 0, 0);
+    const w = chart.clientWidth, h = chart.clientHeight, x = fi / Math.max(1, D.frames.length - 1) * w;
+    cctx.strokeStyle = 'rgba(255,255,255,0.6)'; cctx.beginPath(); cctx.moveTo(x, 0); cctx.lineTo(x, h); cctx.stroke();
+    $('popnow').textContent = `· ${D.frames[fi].p.length / 8} now`;
+  }
+  chart.addEventListener('click', ev => {
+    if (!D) return;
+    const r = chart.getBoundingClientRect();
+    fi = Math.round((ev.clientX - r.left) / r.width * (D.frames.length - 1)); frac = 0; draw();
+  });
 
   let evEls = [];
   function renderEvents() {
@@ -282,8 +336,26 @@
       `<div class="say">${(said || '(no recorded thoughts yet)').replace(/</g, '&lt;')}</div>`;
     if (scroll) $('inspector').scrollIntoView({ block: 'nearest' });
   }
+  cv.addEventListener('wheel', ev => {
+    if (!D) return; ev.preventDefault();
+    const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top;
+    const wx = (mx - ox) / scale, wy = (my - oy) / scale;
+    zoom = Math.min(14, Math.max(1, zoom * (ev.deltaY < 0 ? 1.2 : 1 / 1.2)));
+    scale = fit * zoom; vx = wx - (mx - cw / 2) / scale; vy = wy - (my - ch / 2) / scale; applyView(); draw();
+  }, { passive: false });
+  let drag = null, dragged = false;
+  cv.addEventListener('mousedown', ev => { drag = [ev.clientX, ev.clientY, vx, vy]; dragged = false; });
+  window.addEventListener('mousemove', ev => {
+    if (!drag) return;
+    const dx = ev.clientX - drag[0], dy = ev.clientY - drag[1];
+    if (Math.abs(dx) + Math.abs(dy) > 4) dragged = true;
+    if (dragged) { vx = drag[2] - dx / scale; vy = drag[3] - dy / scale; $('follow').checked = false; applyView(); draw(); }
+  });
+  window.addEventListener('mouseup', () => { drag = null; });
+  $('resetView').onclick = () => { $('follow').checked = false; resetView(); draw(); };
+  $('follow').onchange = draw;
   cv.addEventListener('click', ev => {
-    if (!D) return;
+    if (!D || dragged) return;
     const r = cv.getBoundingClientRect(), mx = ev.clientX - r.left, my = ev.clientY - r.top, f = D.frames[fi];
     let best = null, bd = 12;
     for (let i = 0; i < f.p.length; i += 8) { const d = Math.hypot(X(f.p[i + 1] / 10) - mx, Y(f.p[i + 2] / 10) - my); if (d < bd) { bd = d; best = f.p[i]; } }
@@ -306,6 +378,10 @@
     if (e.key === ' ') { e.preventDefault(); $('play').click(); }
     if (e.key === 'ArrowRight') { fi = Math.min(D.frames.length - 1, fi + 1); frac = 0; draw(); }
     if (e.key === 'ArrowLeft') { fi = Math.max(0, fi - 1); frac = 0; draw(); }
+    if (e.key === '+' || e.key === '=') { zoom = Math.min(14, zoom * 1.25); applyView(); draw(); }
+    if (e.key === '-') { zoom = Math.max(1, zoom / 1.25); applyView(); draw(); }
+    if (e.key === '0') { $('follow').checked = false; resetView(); draw(); }
+    if (e.key === 'f' || e.key === 'F') { $('follow').checked = !$('follow').checked; draw(); }
   });
   resize();
 })();

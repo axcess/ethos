@@ -17,4 +17,7 @@ Or open `tools/viewer/index.html` directly and choose the `viewer.json` file.
 - **Colour by:** detected group, home camp, founding culture, current action, or most prominent role.
 - **Thoughts:** recent thought-log lines appear as bubbles; click a person to pin them in the inspector.
 - **Events:** click an event to jump there and select its first participant.
+- **Zoom** with the mouse wheel (or + / −), **drag** to pan, **⤢ fit** (or 0) to reset. Names appear when zoomed in.
+- **Follow** (or F) keeps the selected person centred.
+- **Population chart:** people (blue) and camps (gold) over the whole run; click it to jump in time.
 - Keys: space = play/pause, ←/→ = step.

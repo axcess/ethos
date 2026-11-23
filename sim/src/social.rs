@@ -777,7 +777,7 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
             let w: f32 = e.creatures.iter().map(|c| c.m).sum();
             if w > 0.0 { e.creatures.iter().map(|c| c.g.capacity * c.m).sum::<f32>() / w } else { 0.0 }
         }),
-        max_diet: sim.evo.as_ref().map_or(0.0, |e| e.creatures.iter().filter(|c| c.m > 5.0).map(|c| c.g.diet).fold(0.0, f32::max)),
+        max_diet: sim.evo.as_ref().map_or(0.0, |e| e.creatures.iter().filter(|c| c.m >= 1.0).map(|c| c.g.diet).fold(0.0, f32::max)),
         believed_groups: believed,
         mean_identity: if id_n > 0 { id_sum / id_n as f32 } else { 0.0 },
         identity_agreement: if agree_n > 0 { agree_sum / agree_n as f32 } else { 0.0 },

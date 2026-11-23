@@ -21,6 +21,8 @@ pub struct FaunaCfg {
     pub species_distance: f32,
     /// Energy cost multiplier of intelligence (capacity).
     pub capacity_cost: f32,
+    /// Extra days to maturity per unit of capacity (a long childhood).
+    pub capacity_maturity: f32,
 }
 impl Default for FaunaCfg {
     fn default() -> Self {
@@ -32,7 +34,8 @@ impl Default for FaunaCfg {
             mutation_rate: 0.3,
             mutation_size: 0.05,
             species_distance: 0.12,
-            capacity_cost: 0.6,
+            capacity_cost: 0.3,
+            capacity_maturity: 40.0,
         }
     }
 }
@@ -86,8 +89,8 @@ pub enum FaunaEvent {
 }
 
 /// Days of growth before an animal can breed: bigger and cleverer animals mature slower.
-fn maturity_days(g: &Genome) -> f32 {
-    12.0 + 40.0 * g.size + 80.0 * g.capacity
+fn maturity_days(g: &Genome, cfg: &FaunaCfg) -> f32 {
+    12.0 + 40.0 * g.size + cfg.capacity_maturity * g.capacity
 }
 
 fn cell_of(x: f32, y: f32) -> usize {
@@ -172,6 +175,12 @@ impl Evo {
             }
         }
         let n = self.creatures.len();
+        // how many animals already feed in each cell (crowded spots are worth less)
+        let mut crowd = vec![0.0f32; W * H];
+        for c in self.creatures.iter().filter(|c| c.alive) {
+            crowd[cell_of(c.x, c.y)] += c.m;
+        }
+        self.crowd = crowd;
         let mut kills: Vec<(usize, usize)> = Vec::new();
         for k in 0..n {
             if !self.creatures[k].alive {
@@ -208,7 +217,8 @@ impl Evo {
                         if d > sense {
                             continue;
                         }
-                        if oc.species == c.species {
+                        // kin are recognised by close genetic similarity, not by species label
+                        if oc.g.distance(&c.g) < 0.06 {
                             _kin_near += oc.m.min(20.0);
                             kin_n += 1.0;
                             kin_cx += oc.x;
@@ -217,7 +227,7 @@ impl Evo {
                             if threat.map_or(true, |t| d < t.2) {
                                 threat = Some((oc.x, oc.y, d));
                             }
-                        } else if g.diet > 0.12 && oc.g.size < g.size * (1.0 - 0.4 * (1.0 - g.diet)) {
+                        } else if g.diet > 0.12 && oc.g.size < g.size * (0.85 + 0.3 * g.diet) {
                             let value = oc.g.size * (1.0 - oc.g.armor * 0.6) / (1.0 + d / 20.0);
                             if prey.map_or(true, |p| value > p.1) {
                                 prey = Some((o, value));
@@ -253,17 +263,36 @@ impl Evo {
                 if d <= step {
                     // the strike: speed, size, cleverness vs armour, escape and the safety of numbers
                     let prey_school = 1.0 + pc.g.sociality * (pc.m.min(30.0) / 10.0);
-                    let p_hit = ((0.25 + 0.5 * (c.g.speed - pc.g.speed).max(-0.5) + 0.3 * cap - 0.25 * pc.g.capacity) * (1.0 - 0.6 * pc.g.armor) / prey_school).clamp(0.02, 0.9);
-                    if r.chance(p_hit * c.g.diet) {
+                    let p_hit = ((0.25 + 0.5 * (c.g.speed - pc.g.speed).max(-0.5) + 0.6 * (c.g.size - pc.g.size) + 0.3 * cap - 0.25 * pc.g.capacity) * (1.0 - 0.6 * pc.g.armor) / prey_school).clamp(0.02, 0.9);
+                    if r.chance(p_hit) {
                         kills.push((k, p));
                     }
                 }
             } else {
-                // graze: weigh a few candidate spots (cleverer animals weigh more, and remember)
-                let options = 1 + (cap * 12.0) as usize;
-                let mut best = (c.x, c.y, self.food_at(world, c.x, c.y, &c.g));
+                // graze: even brainless animals follow the food gradient to neighbouring cells;
+                // cleverer ones also weigh spots further off, and remember good places
+                let here = self.food_at(world, c.x, c.y, &c.g);
+                let mut best = (c.x, c.y, here);
+                let reach = (CELL * 1.2).max(step);
+                for (dx, dy) in [(1.0f32, 0.0f32), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] {
+                    if !r.chance(0.4 + 0.6 * c.g.chemo) {
+                        continue;
+                    }
+                    let (ox, oy) = ((c.x + dx * reach).clamp(2.0, TANK_W - 2.0), (c.y + dy * reach).clamp(2.0, TANK_H - 2.0));
+                    let f = self.food_at(world, ox, oy, &c.g);
+                    if f > best.2 {
+                        best = (ox, oy, f);
+                    }
+                }
+                let options = (cap * 12.0) as usize;
+                // hungry animals with nothing better nearby set off to roam
+                let range = if c.energy < 0.4 && best.2 <= here { reach * 4.0 } else { reach * (1.0 + 3.0 * cap) };
+                if c.energy < 0.4 && best.2 <= here * 1.05 {
+                    let ang = r.range(0.0, 6.283);
+                    best = ((c.x + range * libm::cosf(ang)).clamp(2.0, TANK_W - 2.0), (c.y + range * libm::sinf(ang)).clamp(2.0, TANK_H - 2.0), here);
+                }
                 for _ in 0..options {
-                    let (ox, oy) = ((c.x + r.range(-step, step)).clamp(2.0, TANK_W - 2.0), (c.y + r.range(-step, step)).clamp(2.0, TANK_H - 2.0));
+                    let (ox, oy) = ((c.x + r.range(-range, range)).clamp(2.0, TANK_W - 2.0), (c.y + r.range(-range, range)).clamp(2.0, TANK_H - 2.0));
                     let f = self.food_at(world, ox, oy, &c.g);
                     if f > best.2 {
                         best = (ox, oy, f);
@@ -299,19 +328,22 @@ impl Evo {
             }
             self.creatures[k] = c;
         }
-        // predation
+        // predation: a pack makes several kills, shared among its members
         for (hunter, victim) in kills {
-            if !self.creatures[victim].alive {
+            if !self.creatures[victim].alive || !self.creatures[hunter].alive {
                 continue;
             }
-            let gain = self.creatures[victim].g.size * 0.6 + 0.1;
+            let pack = self.creatures[hunter].m;
+            let taken = (pack * 0.25).max(1.0).min(self.creatures[victim].m);
+            let food = taken * (self.creatures[victim].g.size * 2.0 + 0.4);
+            self.fauna_tally[3] += taken;
             let v = &mut self.creatures[victim];
-            v.m -= 1.0;
+            v.m -= taken;
             if v.m < 1.0 {
                 v.alive = false;
             }
             let h = &mut self.creatures[hunter];
-            h.energy = (h.energy + gain * 4.0 / h.m.max(4.0)).min(1.0);
+            h.energy = (h.energy + food * 0.25 / h.m.max(1.0)).min(1.0);
         }
         self.fauna_life_cycle(cfg, tick, dt, r);
     }
@@ -321,30 +353,70 @@ impl Evo {
         let i = cell_of(x, y);
         let c = &world.cells[i];
         let k = if g.layer > 0.66 { BOTTOM } else if g.layer > 0.33 { MID } else { 0 };
-        let mats: f32 = self.pop[i * LAYERS + k].iter().map(|e| e.1).sum();
-        (1.0 - g.diet) * (c.algae + c.shell + mats * 0.5)
+        let mats: f32 = (0..LAYERS)
+            .map(|kk| {
+                let eff = if kk == k { 1.0 } else if (kk as isize - k as isize).abs() == 1 { 0.5 } else { 0.0 };
+                eff * self.pop[i * LAYERS + kk].iter().map(|e| e.1).sum::<f32>()
+            })
+            .sum();
+        (1.0 - g.diet) * (c.algae + c.shell + mats) / (1.0 + 0.3 * self.crowd.get(i).copied().unwrap_or(0.0))
     }
 
     /// A group of `m` animals feeds here; returns energy gained per animal.
+    /// A herd of `m` animals feeds across the cells it spreads over (bigger herds range wider);
+    /// returns energy gained per animal.
     fn eat_at(&mut self, world: &mut World, x: f32, y: f32, g: &Genome, dt: f32, m: f32) -> f32 {
-        let i = cell_of(x, y);
         let per = (0.4 + g.size) * dt * (1.0 - g.diet) * 2.0;
-        let want = per * m;
+        let mut need = per * m;
         let mut got = 0.0f32;
-        let c = &mut world.cells[i];
-        let a = (want * 0.6).min(c.algae);
-        c.algae -= a;
-        got += a;
-        let s = (want * 0.3).min(c.shell);
-        c.shell -= s;
-        got += s * 1.5;
+        let (cx, cy) = (((x / CELL) as isize).clamp(0, W as isize - 1), ((y / CELL) as isize).clamp(0, H as isize - 1));
+        let radius = (1.0 + libm::sqrtf(m) / 4.0).min(3.0) as isize;
         let k = if g.layer > 0.66 { BOTTOM } else if g.layer > 0.33 { MID } else { 0 };
-        let mut need = (want - got).max(0.0);
-        for e in self.pop[i * LAYERS + k].iter_mut() {
-            let t = need.min(e.1 * 0.5);
-            e.1 -= t;
-            need -= t;
-            got += t * 0.5;
+        let cells: Vec<usize> = {
+            let mut v = Vec::new();
+            for dy in -radius..=radius {
+                for dx in -radius..=radius {
+                    let (nx, ny) = (cx + dx, cy + dy);
+                    if nx >= 0 && ny >= 0 && nx < W as isize && ny < H as isize {
+                        v.push(ny as usize * W + nx as usize);
+                    }
+                }
+            }
+            v
+        };
+        let share = 1.0 / cells.len() as f32;
+        for &i in &cells {
+            let mut want = need.min(per * m * share * 1.5);
+            // refuges: grazing stops short of the last of a bed, so it can regrow
+            let c = &mut world.cells[i];
+            let a = (want * 0.6).min((c.algae - 0.2 * c.algae_cap).max(0.0) * 0.5);
+            c.algae -= a;
+            want -= a;
+            let s = (want * 0.5).min((c.shell - 0.2 * c.shell_cap).max(0.0) * 0.5);
+            c.shell -= s;
+            want -= s;
+            let mut mats = 0.0;
+            // graze mats in the preferred layer fully, neighbouring layers at half efficiency
+            for kk in 0..LAYERS {
+                let eff = if kk == k { 1.0 } else if (kk as isize - k as isize).abs() == 1 { 0.5 } else { 0.0 };
+                if eff == 0.0 || want <= 0.0 {
+                    continue;
+                }
+                for e in self.pop[i * LAYERS + kk].iter_mut() {
+                    // well-defended mats are harder to graze, and thin mats are left alone
+                    let def = self.strains[e.0 as usize].g.defense;
+                    let t = (want / eff).min((e.1 - 1.5).max(0.0) * 0.3 * (1.0 - 0.6 * def));
+                    e.1 -= t;
+                    want -= t * eff;
+                    mats += t * eff;
+                }
+            }
+            let here = a + s * 1.5 + mats;
+            got += here;
+            need = (need - here).max(0.0);
+            if need <= 0.0 {
+                break;
+            }
         }
         got / m.max(1.0) * 0.25
     }
@@ -361,29 +433,45 @@ impl Evo {
             // starvation thins the group; old age too
             if c.energy < 0.1 {
                 // a hungry group loses its weakest members
-                c.m *= 1.0 - 0.3 * dt * (0.1 - c.energy.max(0.0)) * 10.0;
+                let lost = c.m * 0.3 * dt * (0.1 - c.energy.max(0.0)) * 10.0;
+                self.fauna_tally[1] += lost;
+                c.m -= lost;
                 c.energy = c.energy.max(0.0);
             }
             if c.age_days > c.g.max_age * 48.0 {
+                self.fauna_tally[2] += c.m * 0.05 * dt;
                 c.m *= 1.0 - 0.05 * dt;
             }
             if c.m < 1.0 {
+                self.fauna_tally[1] += c.m.max(0.0);
                 c.alive = false;
                 continue;
             }
             // breeding: well-fed, mature groups grow; some young split off as a new, mutated group
-            if c.energy > 0.55 && c.age_days > maturity_days(&c.g) {
-                let rate = 0.25 * dt * (c.energy - 0.55) * (0.5 + c.g.fertility) * (1.0 - 0.5 * c.g.size);
+            if c.energy > 0.55 && c.age_days > maturity_days(&c.g, cfg) {
+                // fewer young where the feeding ground is crowded (density-dependent breeding)
+                let local = self.crowd.get(cell_of(c.x, c.y)).copied().unwrap_or(0.0);
+                let crowd_room = 1.0 / (1.0 + local / 12.0);
+                let rate = 0.25 * dt * (c.energy - 0.55) * (0.5 + c.g.fertility) * (1.0 - 0.5 * c.g.size) * crowd_room;
                 let young = c.m * rate;
+                self.fauna_tally[0] += young;
                 c.energy -= 0.25 * dt;
-                if r.chance(cfg.split_chance * dt * 4.0) && newborn.len() < room {
+                // a new, mutated group buds off only from a herd big enough to spare two animals
+                if c.m >= 4.0 && r.chance(cfg.split_chance * dt * 4.0) && newborn.len() < room {
                     let g = c.g.mutant(r, cfg.mutation_rate, cfg.mutation_size);
                     let m = (young * 4.0).max(2.0).min(c.m * 0.5);
-                    c.m -= m * 0.5;
+                    c.m -= m - young;
                     newborn.push(Creature { id: 0, species: c.species, g, x: c.x + r.range(-6.0, 6.0), y: c.y + r.range(-6.0, 6.0), energy: 0.5, age_days: 0.0, m, alive: true, mem: None, born: tick, gen: c.gen + 1 });
                 } else {
                     c.m += young;
                 }
+            }
+            if c.m > 60.0 && newborn.len() < room {
+                let half = c.m * 0.5;
+                c.m -= half;
+                let g = if r.chance(0.5) { c.g.mutant(r, cfg.mutation_rate, cfg.mutation_size) } else { c.g.clone() };
+                let ang = r.range(0.0, 6.283);
+                newborn.push(Creature { id: 0, species: c.species, g, x: (c.x + 20.0 * libm::cosf(ang)).clamp(2.0, TANK_W - 2.0), y: (c.y + 20.0 * libm::sinf(ang)).clamp(2.0, TANK_H - 2.0), energy: c.energy, age_days: c.age_days, m: half, alive: true, mem: c.mem, born: tick, gen: c.gen + 1 });
             }
             c.m = c.m.min(400.0);
         }

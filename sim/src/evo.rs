@@ -192,6 +192,10 @@ pub struct Evo {
     pub first_hunter_seen: bool,
     pub cleverest_mark: f32,
     pub frng: Option<Rng>,
+    /// diagnostics: animals born, starved, died old, eaten (cumulative)
+    pub fauna_tally: [f32; 4],
+    #[serde(skip)]
+    pub crowd: Vec<f32>,
     /// Slots of extinct strains, reused so the table stays bounded.
     pub free: Vec<u32>,
     pub live: usize,

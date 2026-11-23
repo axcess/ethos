@@ -231,3 +231,22 @@ Status: **Accepted** (approved by you), **Proposed** (my call, awaiting review),
 - *No vendettas:* a grudge alone licenses only immediate retaliation; punishment settles the debt (after witnesses have judged it).
 **Why:** Bed-resting alone spread everywhere by cycle 3 and changed nothing, because births kept growing. Gulper immigration ignored prey and finished off post-crash survivors. A feud spiral (up to 687 punishments per tank) had been suppressing growth and inflating the escape rate.
 **Result (24 seeds × 60 cycles, `phase-1-batch-d3d4.md`):** 29% of booming tanks escape, 58% crash (half of those regrow past the old peak), 0% extinct. Thefts fell from about 50 to about 20 per tank; anti-theft norms take hold in 21%.
+
+---
+
+## Phase 2 decisions (in progress)
+
+### D-044 · Evolution mode and 2.5-D water
+**Status:** Accepted (Phase 2 Q1–Q3)
+**Decision:** `config/presets/evolution.toml` starts a lifeless tank; the default "start with people" mode is unchanged. Each map cell has 3 water layers (surface, mid, bottom) with light, temperature, oxygen, nutrients and detritus. Hand-written gulpers and drifters exist only in "start with people" mode.
+
+### D-045 · Microbial evolution: strains, arms race, bounded table
+**Status:** Proposed
+**Decision:** Up to 4 strains per cell-layer; life starts where prebiotic soup is rich (vents or sunlit, nutrient-rich shallows). Size needs multicellularity, and a grazer can only eat what it is big enough to eat; size and multicellularity cost steeply. Near-identical strains within a species are merged so the table never blocks new mutants. A mass extinction is a collapse in living species (below half the recent peak), not turnover.
+**Why:** Without the arms race, multicellularity never evolved; without merging, evolution froze once the table filled.
+
+### D-046 · Animals as herds of evolving creatures
+**Status:** Proposed
+**Decision:** Dense multicellular grazers can give rise to animals: agents standing for herds, each with a full genome (size, diet, speed, armour, senses, intelligence, sociality, preferred depth). Herds feed across an area that grows with herd size, follow food gradients (even without intelligence), avoid crowded spots, breed in proportion to local food per head, split when large, and leave grazing refuges (beds and mats are never stripped to zero). Kin are recognised by genetic similarity; anything more distant can be prey. Intelligence costs energy and lengthens childhood, and buys wider search, memory, better escapes and better hunting.
+**Why:** Each rule fixed an observed failure: herds starving on one depleted cell, a food-accounting error (herd intake didn't scale with herd size), fractional herds leaking animals, hunting impossible within one species, and grazers wiping out their own food base.
+**Status of results:** animals persist in 3/4 test tanks to cycle 800; intelligence reaches 0.35 occasionally; no dedicated hunters yet.

@@ -393,7 +393,7 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
             } else if matches!(rel, x if x == Rel::Cursed as u8 || x == Rel::Watch as u8 || x == Rel::Governs as u8 || x == Rel::Sacred as u8) {
                 prophets.insert(origin);
             }
-            let key = fnv64(&[origin.to_le_bytes().as_slice(), subj.to_le_bytes().as_slice(), &[rel]].concat());
+            let key = fnv64(&[subj.to_le_bytes().as_slice(), &[rel]].concat());
             if !sim.obs.spread_beliefs.contains(&key) {
                 sim.obs.spread_beliefs.push(key);
                 spread_events.push((origin, subj, rel, cnt));

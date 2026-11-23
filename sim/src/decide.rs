@@ -595,8 +595,11 @@ impl Sim {
         let felt = m.top_emotion().map_or((NONE, 0.0), |(e, v)| (e as u8, v));
         let (dk, dv) = m.drives.iter().enumerate().fold((0usize, 0.0f32), |a, (k, v)| if *v > a.1 { (k, *v) } else { a });
         let mut expect = (NONE, NONE, 0.0);
+        let mut best_w = 0.0f32;
         for (o, (pr, cue)) in m.expect.iter().enumerate() {
-            if *pr > expect.2 && *pr > 0.3 {
+            let w = *pr * if o == outcome::PLENTY { 0.3 } else { 1.0 };
+            if w > best_w && *pr > 0.3 {
+                best_w = w;
                 expect = (o as u8, *cue as u8, *pr);
             }
         }
@@ -1066,6 +1069,7 @@ impl Sim {
             let tick = self.tick;
             let cname = self.camp_name(camp);
             self.people[i].life_note(tick, format!("joined the camp of {cname}"));
+            self.people[i].consider_move_day = self.day() + 2 * self.cfg.time.days_per_cycle();
             if old != Some(camp) {
                 let place = self.world.camps[camp as usize].place;
                 let name = self.name(i as u32);
@@ -1131,6 +1135,10 @@ impl Sim {
             }
         }
         self.people[i].founded_camps += 1;
+        let settle = self.day() + 2 * self.cfg.time.days_per_cycle();
+        for &m in &all {
+            self.people[m as usize].consider_move_day = settle;
+        }
         self.people[i].life_note(tick, format!("founded the camp of {cname} with {} others", followers.len()));
         let from = home.map(|h| self.camp_name(h)).unwrap_or_else(|| "nowhere".into());
         let name = self.name(i as u32);

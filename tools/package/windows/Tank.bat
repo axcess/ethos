@@ -2,6 +2,13 @@
 setlocal EnableDelayedExpansion
 title THE TANK
 cd /d "%~dp0"
+
+rem --- startup checks: explain problems instead of failing silently ---
+echo "%~dp0" | find /i "\Temp\" >nul && goto inzip
+if not exist "%~dp0tank.exe" goto noexe
+"%~dp0tank.exe" version >nul 2>&1
+if errorlevel 1 goto broken
+if not exist "%~dp0data\climate\chicago_daily.csv" goto nodata
 if not exist runs mkdir runs
 
 :menu
@@ -87,3 +94,46 @@ echo.
 echo   Something went wrong (see the messages above). Please send them to Claude.
 pause
 goto menu
+
+:inzip
+echo.
+echo   It looks like Tank.bat was opened from inside the zip file.
+echo   Windows only unpacked this one file, so the program next to it is missing.
+echo.
+echo   Fix: close this window. Right-click TheTank-windows.zip, choose
+echo   "Extract All...", then open the extracted folder and double-click Tank.bat.
+echo.
+pause
+exit /b 1
+
+:noexe
+echo.
+echo   tank.exe is missing from this folder:
+echo   %~dp0
+echo.
+echo   Either the zip was not fully extracted, or Windows Defender removed it.
+echo   To check: Start menu, "Windows Security", "Virus and threat protection",
+echo   "Protection history". If tank.exe is listed there, choose "Allow",
+echo   then extract the zip again.
+echo.
+pause
+exit /b 1
+
+:nodata
+echo.
+echo   The climate data file is missing: data\climate\chicago_daily.csv
+echo   Please extract the whole zip again, keeping its folders.
+echo.
+pause
+exit /b 1
+
+:broken
+echo.
+echo   tank.exe is here but will not start. Its own error message follows:
+echo   ----------------------------------------------------------------
+"%~dp0tank.exe" version
+echo   ----------------------------------------------------------------
+echo   Please send Claude a screenshot of this window.
+echo.
+pause
+exit /b 1

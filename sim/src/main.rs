@@ -319,6 +319,18 @@ fn main() {
         Some("determinism") => cmd_determinism(&args),
         Some("bench") => cmd_bench(&args),
         Some("inspect") => cmd_inspect(&args),
+        Some("version") => println!("tank {}", tank_sim::ENGINE_VERSION),
+        None => {
+            // double-clicked: explain instead of flashing a window shut
+            println!("THE TANK engine {}.", tank_sim::ENGINE_VERSION);
+            println!();
+            println!("This is the simulation engine; it needs instructions.");
+            println!("To watch a tank, double-click Tank.bat in the same folder instead.");
+            println!();
+            println!("Press Enter to close.");
+            let mut s = String::new();
+            let _ = std::io::stdin().read_line(&mut s);
+        }
         _ => {
             eprintln!("usage: tank <run|batch|scenarios|determinism|bench|inspect> [options]\n  see sim/src/main.rs header for options");
             std::process::exit(1);

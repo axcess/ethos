@@ -77,6 +77,8 @@ pub struct Sim {
     #[serde(skip)]
     pub at_place: Vec<Vec<u32>>,
     pub extinct: bool,
+    #[serde(default)]
+    pub evo: Option<crate::evo::Evo>,
 }
 
 pub fn pair_mut<T>(v: &mut [T], a: usize, b: usize) -> (&mut T, &mut T) {
@@ -130,9 +132,23 @@ impl Sim {
             ds: Some(ds),
             at_place: vec![Vec::new(); N_PLACES],
             extinct: false,
+            evo: None,
             cfg,
         };
-        sim.found_population(&species);
+        if sim.cfg.evolution.enabled {
+            // a lifeless tank: no people, no beds, no hand-made fauna; everything must evolve
+            sim.evo = Some(crate::evo::Evo::new(seed));
+            for c in sim.world.cells.iter_mut() {
+                c.algae = 0.0;
+                c.shell = 0.0;
+                c.life_algae = 0.0;
+                c.life_shell = 0.0;
+            }
+            sim.world.herds.clear();
+            sim.world.predators.clear();
+        } else {
+            sim.found_population(&species);
+        }
         sim.new_day();
         sim
     }
@@ -439,6 +455,25 @@ impl Sim {
 
     // ---------------------------------------------------------------- events & logs
 
+    fn emit_evo(&mut self, _t: u64, e: crate::evo::EvoEvent) {
+        use crate::evo::EvoEvent::*;
+        let (kind, place, text) = match e {
+            LifeBegins { cell, vent, .. } => {
+                let (x, y) = World::cell_center(cell);
+                let pl = place_of(x, y);
+                (EvKind::LifeBegins, pl, format!("Life begins: a self-copying film appears {} at the {}", if vent { "at a hot vent" } else { "in the sunlit shallows" }, self.place_name(pl)))
+            }
+            Speciation { species, parent, kind } => (EvKind::Speciation, 0, match parent {
+                Some(p) => format!("A new species ({species}) of {kind} branches off from species {p}"),
+                None => format!("The first species ({species}) of {kind}"),
+            }),
+            Extinction { species, kind, lived_days } => (EvKind::SpeciesExtinct, 0, format!("Species {species} ({kind}) dies out after {lived_days} days")),
+            MassExtinction { lost, of } => (EvKind::MassExtinction, 0, format!("Mass extinction: {lost} of {of} species lost within a cycle")),
+            FirstOf { kind, species } => (EvKind::EvolutionaryFirst, 0, format!("For the first time in this tank: a {kind} (species {species})")),
+        };
+        self.emit(kind, vec![], place, text);
+    }
+
     pub fn emit(&mut self, kind: EvKind, who: Vec<u32>, place: u8, text: String) {
         let mut imp = kind.base_importance();
         for w in &who {
@@ -488,6 +523,13 @@ impl Sim {
     }
 
     pub fn step(&mut self) {
+        // deep time: with no animals or people, only the daily world update matters
+        if self.evo.is_some() && self.alive.is_empty() {
+            let next_day = (self.tick / self.tpd() + 1) * self.tpd();
+            self.tick = next_day;
+            self.new_day();
+            return;
+        }
         let step = self.cfg.time.step_ticks;
         let before_day = self.tick / self.tpd();
         self.tick += step;
@@ -587,6 +629,14 @@ impl Sim {
             self.emit(EvKind::ClimateExtreme, vec![], 0, text);
         }
         self.world.prev_climate = std::mem::replace(&mut self.world.climate, c);
+        if let Some(mut evo) = self.evo.take() {
+            let ecfg = self.cfg.evolution.clone();
+            evo.daily(&mut self.world, &ecfg, self.tick, day);
+            for (t, e) in std::mem::take(&mut evo.events) {
+                self.emit_evo(t, e);
+            }
+            self.evo = Some(evo);
+        }
         self.world.update_foul(&self.cfg.world);
         self.world.daily(&self.cfg.world);
         self.counters.algae_grown += self.world.grown_today.0;
@@ -600,7 +650,7 @@ impl Sim {
         if day % self.cfg.observer.group_every_days == 0 {
             crate::social::detect_groups(self);
         }
-        if self.alive.is_empty() && !self.extinct {
+        if self.alive.is_empty() && !self.extinct && self.evo.is_none() {
             self.extinct = true;
             self.emit(EvKind::Extinction, vec![], 0, "The last of the people is gone.".into());
         }

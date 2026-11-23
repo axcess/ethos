@@ -287,6 +287,22 @@ fn modal_form(forms: &BTreeMap<Form, u32>) -> Option<(&Form, u32)> {
     })
 }
 
+/// The era label the observer computes (DESIGN §5.6). Eras are labels, never simulation states.
+pub fn era_label(sim: &Sim) -> String {
+    match &sim.evo {
+        None => "people".into(),
+        Some(e) => {
+            if !sim.alive.is_empty() {
+                "minds".into()
+            } else if e.live_strains() == 0 {
+                if e.life_began.is_some() { "dead".into() } else { "lifeless".into() }
+            } else {
+                "primordial".into()
+            }
+        }
+    }
+}
+
 pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
     let tick = sim.tick;
     let adults: Vec<u32> = sim.alive.iter().copied().filter(|&i| sim.adult(i as usize)).collect();
@@ -742,6 +758,14 @@ pub fn cycle_observe(sim: &mut Sim, cycle: u64) {
         behavior_entropy: h_mean,
         behavior_divergence: divergence,
         change_index: change,
+        era: era_label(sim),
+        live_strains: sim.evo.as_ref().map_or(0, |e| e.live_strains() as u32),
+        live_species: sim.evo.as_ref().map_or(0, |e| e.live_species() as u32),
+        species_ever: sim.evo.as_ref().map_or(0, |e| e.species.len() as u32),
+        biomass: sim.evo.as_ref().map_or(0.0, |e| e.total_biomass()),
+        max_multicell: sim.evo.as_ref().map_or(0.0, |e| e.strains.iter().filter(|s| s.extinct.is_none() && s.biomass > 1.0).map(|s| s.g.multicell).fold(0.0, f32::max)),
+        max_size: sim.evo.as_ref().map_or(0.0, |e| e.strains.iter().filter(|s| s.extinct.is_none() && s.biomass > 1.0).map(|s| s.g.size).fold(0.0, f32::max)),
+        kinds: sim.evo.as_ref().map_or(0, |e| e.kinds_seen.len() as u32),
         believed_groups: believed,
         mean_identity: if id_n > 0 { id_sum / id_n as f32 } else { 0.0 },
         identity_agreement: if agree_n > 0 { agree_sum / agree_n as f32 } else { 0.0 },

@@ -1,0 +1,5 @@
+# Evolution mode: the tank starts lifeless; chemistry, microbes, animals and (maybe) minds
+# must all evolve. Phase 2.
+name = "evolution"
+[evolution]
+enabled = true

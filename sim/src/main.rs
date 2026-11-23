@@ -142,7 +142,12 @@ fn cmd_run(args: &Args) {
         }
         if sim.cycle() != last_report {
             last_report = sim.cycle();
-            if let Some(s) = sim.stats.last() {
+            if let (Some(s), true) = (sim.stats.last(), sim.evo.is_some() && sim.alive.is_empty()) {
+                eprintln!(
+                    "cycle {:>4} (Chicago {}) {:<10} strains {:>4} species {:>3} (ever {:>4}) kinds {} biomass {:>7.0} multicell {:.2} size {:.2}",
+                    s.cycle, s.real_year, s.era, s.live_strains, s.live_species, s.species_ever, s.kinds, s.biomass, s.max_multicell, s.max_size
+                );
+            } else if let Some(s) = sim.stats.last() {
                 eprintln!(
                     "cycle {:>3} (Chicago {}) pop {:>4} camps {:>2} groups {:>2} known {:>2} lost {:>2} langs {} intel {:.2} roles {:>2} change {:.2}",
                     s.cycle, s.real_year, s.pop, s.camps, s.groups, s.known_nodes, s.knowledge_lost_total, s.languages, s.min_intelligibility, s.roles_distinct, s.change_index

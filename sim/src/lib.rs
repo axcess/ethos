@@ -6,6 +6,7 @@ pub mod config;
 pub mod decide;
 pub mod discovery;
 pub mod events;
+pub mod evo;
 pub mod export;
 pub mod genome;
 pub mod language;

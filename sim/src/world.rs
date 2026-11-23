@@ -43,6 +43,9 @@ pub struct Cell {
     /// Wear from harvesting (0..1): worn beds regrow slowly until rested (fallow).
     pub fatigue: f32,
     pub harvested_today: bool,
+    /// How much evolved life supports algae and shellfish beds here (1 in "start with people" tanks).
+    pub life_algae: f32,
+    pub life_shell: f32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -265,6 +268,8 @@ impl World {
                     garden: 0.0,
                     fatigue: 0.0,
                     harvested_today: false,
+                    life_algae: 1.0,
+                    life_shell: 1.0,
                     bed: false,
                     heat: 0.0,
                 });
@@ -418,7 +423,7 @@ impl World {
                     let growth = wc.algae_regrow * light * tf * a * (1.0 - a / cap) + 0.008 * cap * light * tf;
                     // tending (weeding, clearing, spreading) makes beds grow faster; wear undoes it
                     let worn = (1.0 + wc.garden_growth * cell.garden) * (1.0 - wc.fatigue_effect * cell.fatigue);
-                    let na = (a + growth * mult * worn).clamp(0.0, cap);
+                    let na = (a + growth * mult * worn * cell.life_algae).clamp(0.0, cap);
                     grown.0 += (na - a).max(0.0);
                     cell.algae = na;
                 }
@@ -427,7 +432,7 @@ impl World {
                     let s = cell.shell;
                     let allee = if cell.bed { 0.0 } else { wc.shell_allee };
                     let g = wc.shell_regrow * s * (1.0 - s / scap) * ((s / scap - allee) * 4.0).clamp(-1.0, 1.0);
-                    let ns = (s + g * mult + 0.0005 * scap).clamp(0.0, scap);
+                    let ns = (s + (g * mult + 0.0005 * scap) * cell.life_shell).clamp(0.0, scap);
                     grown.1 += (ns - s).max(0.0);
                     cell.shell = ns;
                 }

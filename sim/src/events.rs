@@ -33,6 +33,11 @@ pub enum EvKind {
     Famine,
     Extinction,
     CommunityNamed,
+    LifeBegins,
+    Speciation,
+    SpeciesExtinct,
+    MassExtinction,
+    EvolutionaryFirst,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -79,6 +84,11 @@ impl EvKind {
             Famine => 0.7,
             Extinction => 1.0,
             CommunityNamed => 0.5,
+            LifeBegins => 1.0,
+            Speciation => 0.15,
+            SpeciesExtinct => 0.2,
+            MassExtinction => 0.9,
+            EvolutionaryFirst => 0.8,
         }
     }
 }

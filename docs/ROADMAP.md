@@ -7,7 +7,7 @@ with your approval.
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Design document | Approved |
-| 1 | Headless Minds Engine | **In progress**: completion checklist in reports/phase-1-audit.md (must be fully checked before Phase 2) |
+| 1 | Headless Minds Engine | **8/10 must-haves done**; D9/D10 blocked on hardware (reports/phase-1-final.md) |
 | 2 | Full evolutionary arc (headless) | Not started |
 | 3 | Civilization (headless) | Not started |
 | 4 | Renderer and assets | Not started |

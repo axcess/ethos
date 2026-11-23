@@ -71,16 +71,16 @@ All eight exist (famine, predator surge, stranger, leader death, windfall, plagu
 
 **Must have (blocks Phase 2):**
 
-- [ ] **D1. Capacity-scaled minds (D-005).** Memory, belief, acquaintance, vocabulary and planning limits scale with the `capacity` gene. A test shows a low-capacity mind runs the same code with fewer features.
-- [ ] **D2. Group identity.** Minds can hold "I belong to group X" with a shared name in their language, giving in-group trust and out-group wariness. The observer can report believed vs. detected groups.
-- [ ] **D3. Boom-bust has real escapes.** Learned restraint (OQ-17): across 24 seeds × 60 cycles, at least 20% of booming tanks escape *and* at least 30% crash.
-- [ ] **D4. Extinction by cycle 60 ≤ 15%** on the default preset.
-- [ ] **D5. Languages.** Either ≥ 2 mutually unintelligible lexicons in ≥ 30% of seeds by cycle 200 (on the `longrun-test` preset), or you explicitly accept "dialects only" for Phase 1 and the criterion moves to Phase 3.
-- [ ] **D6. Food-balance safeguard.** An automated test asserts that, over a run, food gathered never exceeds regrowth plus starting stock (catches any repeat of the shellfish bug).
-- [ ] **D7. Re-run and replace stale reports.** A fresh 24-seed batch, the scenario suite (≥ 12 seeds, so harsh winter and drought can be judged), and preset batches for `gentle` and `harsh`.
-- [ ] **D8. Thought-log re-review.** A written assessment with excerpts covering leadership, norms, boom-bust collapse and recovery.
-- [ ] **D9. Cross-platform determinism.** Mac and Windows produce the reference hash (needs your two runs).
-- [ ] **D10. Mac benchmark results** committed to `docs/reports/`.
+- [x] **D1. Capacity-scaled minds (D-005).** ✅ D-041; `sim/tests/capacity.rs`. Memory, belief, acquaintance, vocabulary and planning limits scale with the `capacity` gene. A test shows a low-capacity mind runs the same code with fewer features.
+- [x] **D2. Group identity.** ✅ D-042; founding bands become named peoples in 1–2 cycles; believed vs detected agreement ≈ 0.7. Minds can hold "I belong to group X" with a shared name in their language, giving in-group trust and out-group wariness. The observer can report believed vs. detected groups.
+- [x] **D3. Boom-bust has real escapes.** ✅ D-043; final batch: 46% of booms escape, 46% crash. Learned restraint (OQ-17): across 24 seeds × 60 cycles, at least 20% of booming tanks escape *and* at least 30% crash.
+- [x] **D4. Extinction by cycle 60 ≤ 15%** ✅ 0% in the final 24-seed batch. on the default preset.
+- [x] **D5. Languages.** ✅ All 8 tanks split into 3–7 languages by cycle 200 (first split around cycle 136); `phase-1-languages-200c.md`. Either ≥ 2 mutually unintelligible lexicons in ≥ 30% of seeds by cycle 200 (on the `longrun-test` preset), or you explicitly accept "dialects only" for Phase 1 and the criterion moves to Phase 3.
+- [x] **D6. Food-balance safeguard.** ✅ `sim/tests/food_balance.rs`, verified to catch the old bug. An automated test asserts that, over a run, food gathered never exceeds regrowth plus starting stock (catches any repeat of the shellfish bug).
+- [x] **D7. Re-run and replace stale reports.** ✅ `phase-1-final-*.md`; stale reports removed. A fresh 24-seed batch, the scenario suite (≥ 12 seeds, so harsh winter and drought can be judged), and preset batches for `gentle` and `harsh`.
+- [x] **D8. Thought-log re-review.** ✅ `phase-1-thoughtlog-review.md` (3 more fixes made; 4 non-blocking issues carried to Phase 2). A written assessment with excerpts covering leadership, norms, boom-bust collapse and recovery.
+- [ ] **D9. Cross-platform determinism.** ⏸ Blocked: needs your Windows PC and Mac (Wine is broken in the dev container). Mac and Windows produce the reference hash (needs your two runs).
+- [ ] **D10. Mac benchmark results** ⏸ Blocked: the Mac mini isn't set up yet. committed to `docs/reports/`.
 
 **Should have (do if cheap; otherwise move to Phase 2 with a note):**
 

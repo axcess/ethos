@@ -77,7 +77,7 @@ goto menu
 echo.
 tank.exe determinism --seed 3 --cycles 8
 echo.
-echo   Reference (Linux build): 3477b261bf241a34
+echo   Reference (Linux build): 1a12f34314e5220b
 echo   If all three lines above show that number with MATCH, results are identical on Windows.
 pause
 goto menu

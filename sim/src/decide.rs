@@ -306,7 +306,9 @@ impl Sim {
             let thief = m.belief(Concept::Person(o), Rel::Thief);
             let recently = m.episodes.iter().any(|e| e.other == Some(o) && matches!(e.kind, EpKind::Punished | EpKind::StolenFrom) && tick.saturating_sub(e.tick) < 2 * self.tpd());
             let punished_lately = p.thoughts.iter().rev().take(24).any(|t| t.chose == Act::Punish { who: o });
-            if (thief > 0.4 || grudge > 0.5) && !punished_lately && (recently || thief > 0.6 || tr[3] > 0.6 || (standing > 0.5 && thief > 0.3)) {
+            // a grudge alone licenses only immediate retaliation; a believed thief can be punished later
+            let cause = (grudge >= 0.35 && recently) || (thief >= 0.4 && (recently || thief > 0.6 || tr[3] > 0.6)) || (standing > 0.5 && thief > 0.3);
+            if cause && !punished_lately {
                 saw_list.push((saw::THIEF, o));
                 let w = thief * (norm_steal + 0.2) + grudge;
                 if thief_here.map_or(true, |t| w > t.1) {
@@ -1186,14 +1188,21 @@ impl Sim {
                 let tends = p.home.map_or(false, |h| self.world.camps[h as usize].place == place);
                 let garden = tends && p.knows(n::GARDEN);
                 let bed = tends && p.knows(n::SHELL_BED);
-                let cells = self.world.best_cells(place, 3);
+                // those who know bed-resting pass over worn beds and leave the rest half-grown
+                let resting = self.people[i].knows(n::FALLOW);
+                let cells: Vec<usize> = if resting {
+                    self.world.best_cells(place, 8).into_iter().filter(|&ci| self.world.cells[ci].fatigue < 0.35).take(3).collect()
+                } else {
+                    self.world.best_cells(place, 3)
+                };
+                let leave = if resting { 2.2 } else { 5.0 };
                 let fatigue_k = self.cfg.world.fatigue_per_harvest;
                 let mut got = 0.0;
                 for ci in cells {
                     let cell = &mut self.world.cells[ci];
                     // thin patches are hard to gather: yield falls with density, leaving refuges
-                    let da = if cell.algae_cap > 0.0 { (5.0 * cell.algae / cell.algae_cap).min(1.0) } else { 0.0 };
-                    let ds = if cell.shell_cap > 0.0 { (5.0 * cell.shell / cell.shell_cap).min(1.0) } else { 0.0 };
+                    let da = if cell.algae_cap > 0.0 { (leave * cell.algae / cell.algae_cap).min(1.0) } else { 0.0 };
+                    let ds = if cell.shell_cap > 0.0 { (leave * cell.shell / cell.shell_cap).min(1.0) } else { 0.0 };
                     let take_a = (eff * 0.5 * da).min(cell.algae);
                     cell.algae -= take_a;
                     let take_s = (eff * 0.25 * ds * if scraper { 1.6 } else { 1.0 }).min(cell.shell);
@@ -1223,6 +1232,10 @@ impl Sim {
                 }
                 if garden {
                     self.use_know(i, n::GARDEN);
+                }
+                if resting {
+                    self.use_know(i, n::FALLOW);
+                    self.demonstrate(i, n::FALLOW);
                 }
                 if bed {
                     self.use_know(i, n::SHELL_BED);
@@ -1859,6 +1872,14 @@ impl Sim {
         let (ni, nj) = (self.name(iid), self.name(jid));
         let how = if restitution { "makes {nj} repay what was taken" } else { "beats {nj}" };
         self.emit(EvKind::Punishment, vec![iid, jid], place, format!("{ni} {}", how.replace("{nj}", &nj)));
+        // the debt is settled: the punisher's grudge and certainty of guilt both ease
+        {
+            let pi = &mut self.people[i];
+            pi.mind.model_mut(jid, tick, cap).grudge *= 0.3;
+            if let Some(b) = pi.mind.beliefs.iter_mut().find(|b| b.subject == Concept::Person(jid) && b.rel == Rel::Thief) {
+                b.conf -= 0.3;
+            }
+        }
     }
 
     fn defend(&mut self, i: usize, pred: u32) {

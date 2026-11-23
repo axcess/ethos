@@ -208,7 +208,7 @@ pub fn summarize(sim: &crate::sim::Sim, scenario: &str, wall: f64) -> RunSummary
     let s = &sim.stats;
     let mut r = RunSummary { seed: sim.seed, scenario: scenario.into(), cycles: s.len() as u64, ..Default::default() };
     r.extinct = sim.extinct;
-    r.extinct_cycle = s.iter().find(|c| c.pop == 0).map(|c| c.cycle);
+    r.extinct_cycle = if sim.extinct { Some(sim.cycle()) } else { None };
     r.final_pop = sim.alive.len() as u32;
     r.peak_pop = s.iter().map(|c| c.pop).max().unwrap_or(0);
     r.min_pop = s.iter().map(|c| c.pop).min().unwrap_or(0);

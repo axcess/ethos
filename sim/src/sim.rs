@@ -611,7 +611,10 @@ impl Sim {
         // predator immigration (a trickle from the wider tank)
         let imm = self.cfg.predators.immigration_per_cycle;
         let alive_preds = self.world.predators.iter().filter(|p| p.alive).count() as u32;
-        let imm = if alive_preds < self.cfg.predators.initial { imm.max(0.8) } else { imm };
+        // gulpers drift in from the wider tank only where there is prey to support them
+        let herd_animals: f32 = self.world.herds.iter().map(|h| h.count).sum();
+        let prey = (herd_animals / (self.cfg.world.herds as f32 * 10.0)).min(1.0);
+        let imm = if alive_preds < self.cfg.predators.initial { imm.max(0.8) * prey } else { imm * prey };
         if alive_preds < self.cfg.predators.max && self.pred_rng.chance(imm) {
             let r = &mut self.pred_rng;
             self.world.spawn_predator(r, None);
@@ -665,7 +668,7 @@ impl Sim {
         }
         // rare herd re-seeding from outside (drifters wander in)
         for h in self.world.herds.iter_mut() {
-            if h.count < 1.0 && self.rng.chance(0.01) {
+            if h.count < 1.0 && self.rng.chance(0.03) {
                 h.count = 4.0;
             }
         }
@@ -1162,7 +1165,10 @@ impl Sim {
                 p.saw_predator_today = false;
             }
             if let Some(h) = self.people[i].home {
-                if self.world.camps[h as usize].members > 40 {
+                // crowded: many mouths for what the home grounds seem to offer
+                let camp = &self.world.camps[h as usize];
+                let food_here = self.people[i].mind.places[camp.place as usize].food;
+                if camp.members > 25 || (camp.members > 10 && food_here < 0.3) {
                     cues |= 1 << cue::CROWDED;
                 }
             }
@@ -1397,7 +1403,9 @@ impl Sim {
         if young >= 1 {
             return;
         }
-        let pr = self.cfg.people.conceive_per_day * (0.5 + p.genome.fertility) * (p.energy - 0.2).max(0.0) * 2.0;
+        // minds that can plan and expect hard times hold off on children (anticipation, DESIGN §7.7)
+        let foresight = if p.mind.caps.planning { 1.0 - 0.85 * p.mind.expect[outcome::HUNGER].0 } else { 1.0 };
+        let pr = self.cfg.people.conceive_per_day * (0.5 + p.genome.fertility) * (p.energy - 0.2).max(0.0) * 2.0 * foresight;
         if self.people[i].rng.chance(pr) {
             let due = self.tick + self.cfg.people.gestation_days * self.tpd();
             self.people[i].pregnant = Some((due, m));

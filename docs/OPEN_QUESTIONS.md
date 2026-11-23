@@ -20,4 +20,4 @@ Revisited at every phase boundary. Each has my recommendation. Resolved items mo
 | OQ-14 | Early founder crash (median 126 → 52 by cycle 6): soften or keep? | Phase 1 review | Soften modestly |
 | OQ-15 | Algae gardens arrive early and enable booms to ~800: add prerequisites now? | Phase 1 review | Yes, cheap |
 | OQ-16 | Leaders have little effect: give leadership real coordination powers? | Phase 1 review | Yes, before Phase 2 |
-| OQ-17 | Boom-bust: nearly all tanks overshoot and crash at ~200 people; none escape; 29% extinct by cycle 60. How should escape happen? | Now | Learned restraint: minds learn "worn beds → less food" and "crowding → hunger" from experience, then spread out, rest beds or move sooner. Escape becomes a cultural achievement some tanks reach and others don't. |
+| ~~OQ-17~~ (resolved D-043) | Boom-bust: nearly all tanks overshoot and crash at ~200 people; none escape; 29% extinct by cycle 60. How should escape happen? | Now | Learned restraint: minds learn "worn beds → less food" and "crowding → hunger" from experience, then spread out, rest beds or move sooner. Escape becomes a cultural achievement some tanks reach and others don't. |

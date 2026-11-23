@@ -95,7 +95,8 @@ pub mod n {
     pub const SHARING: u8 = 23;
     pub const RESTITUTION: u8 = 24;
     pub const LURE: u8 = 25;
-    pub const COUNT: usize = 26;
+    pub const FALLOW: u8 = 26;
+    pub const COUNT: usize = 27;
 }
 
 use mat::*;
@@ -129,6 +130,7 @@ pub static NODES: [NodeDef; n::COUNT] = [
     NodeDef { id: 23, name: "sharing custom", kind: Institution, function: "exchange", materials: &[], prereq: &[], needs: &[HUNGER, CONFLICT], min_group: 6, difficulty: 2.2, desc: "those with plenty feed the hungry" },
     NodeDef { id: 24, name: "restitution law", kind: Institution, function: "govern", materials: &[], prereq: &[], needs: &[STOLEN, CONFLICT], min_group: 8, difficulty: 2.8, desc: "a thief repays rather than being beaten" },
     NodeDef { id: 25, name: "drifter lure", kind: Technique, function: "hunt", materials: &[KELP, GLOW], prereq: &[3], needs: &[HUNT_FAIL], min_group: 1, difficulty: 2.2, desc: "drifters are lured into ambush" },
+    NodeDef { id: 26, name: "bed-resting", kind: Practice, function: "manage", materials: &[], prereq: &[], needs: &[HUNGER], min_group: 3, difficulty: 1.4, desc: "worn beds are left to rest and harvests leave beds half-grown" },
 ];
 
 /// What a mind holds about one discovery.

@@ -221,3 +221,13 @@ Status: **Accepted** (approved by you), **Proposed** (my call, awaiting review),
 **Status:** Proposed
 **Decision:** An adult mind with language holds an identity with its home camp. It grows with time among camp-mates it likes, only if the mind has a word for the camp (a shared name), and is strengthened by successful joint hunts. When someone moves, the old allegiance fades before the new one forms. Effects: favours to and from "us", wariness of "them", the anti-theft norm binding less toward outsiders, outsiders punished more readily, and loyalty making people slower to leave. The observer reports believed communities (most adults strongly identify) separately from detected groups, plus how well the two agree, and logs when a camp first sees itself as a people.
 **Result:** founding bands become named peoples within 1–2 cycles; breakaway camps form their own identity later; detected groups and believed identities agree about 70% of the time. Punishment rises (inter-group friction), and so does extinction, which D3/D4 address.
+
+### D-043 · Escaping boom-bust: restraint at harvest and in demand
+**Status:** Proposed (OQ-17)
+**Decision:**
+- *Bed-resting* (discovery 26, a practice invented under hunger): knowers skip worn beds and leave the rest half-grown.
+- *Foresight in births:* a mind that can plan and expects hunger (from its own learned rules, e.g. "crowded camp → hunger") is less likely to conceive. "Crowded" now fires at realistic camp sizes (over 25, or over 10 when home food looks poor).
+- *Gulpers follow prey:* they drift in from the wider tank in proportion to the drifters present; emptied tanks are re-colonised by drifters a little more often.
+- *No vendettas:* a grudge alone licenses only immediate retaliation; punishment settles the debt (after witnesses have judged it).
+**Why:** Bed-resting alone spread everywhere by cycle 3 and changed nothing, because births kept growing. Gulper immigration ignored prey and finished off post-crash survivors. A feud spiral (up to 687 punishments per tank) had been suppressing growth and inflating the escape rate.
+**Result (24 seeds × 60 cycles, `phase-1-batch-d3d4.md`):** 29% of booming tanks escape, 58% crash (half of those regrow past the old peak), 0% extinct. Thefts fell from about 50 to about 20 per tank; anti-theft norms take hold in 21%.

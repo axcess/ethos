@@ -278,8 +278,51 @@ pub mod kin {
     pub const MATE: u8 = 4;
 }
 
+/// What a mind can hold and do, set by the evolved `capacity` gene (DESIGN §5.4, D-005).
+/// The same Mind code runs for a clever fish and a prophet; capacity dials features in.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Caps {
+    pub capacity: f32,
+    /// 0 at capacity 0.15 → 1 at 0.85 (a typical sapient); may exceed 1 slightly
+    pub scale: f32,
+    pub episodic: usize,
+    pub beliefs: usize,
+    pub models: usize,
+    pub lexicon: usize,
+    /// learned signals, the naming game and gossip
+    pub language: bool,
+    /// anticipatory plans (stockpiling)
+    pub planning: bool,
+    /// deliberate teaching and experimentation
+    pub culture: bool,
+}
+
+impl Caps {
+    pub fn from_capacity(c: f32, cfg: &crate::config::MindCfg) -> Caps {
+        let scale = ((c - 0.15) / 0.70).clamp(0.0, 1.2);
+        let s2 = scale * scale;
+        let lim = |base: usize, min: usize| ((base as f32 * s2) as usize).max(min);
+        Caps {
+            capacity: c,
+            scale,
+            episodic: lim(cfg.episodic_cap, 4),
+            beliefs: lim(cfg.belief_cap, 2),
+            models: lim(cfg.model_cap, 4),
+            lexicon: if c >= 0.35 { lim(cfg.lexicon_cap, 8) } else { 0 },
+            language: c >= 0.35,
+            planning: c >= 0.55,
+            culture: c >= 0.55,
+        }
+    }
+    /// Extra evidence a mind needs before trusting a learned rule: simpler minds hold fewer, stronger rules.
+    pub fn rule_margin(&self) -> f32 {
+        (1.0 - self.scale).max(0.0) * 0.3
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Mind {
+    pub caps: Caps,
     pub drives: [f32; N_DRIVES],
     pub traits: [f32; N_TRAITS],
     pub base_traits: [f32; N_TRAITS],
@@ -298,8 +341,9 @@ pub struct Mind {
 }
 
 impl Mind {
-    pub fn new(traits: [f32; N_TRAITS]) -> Mind {
+    pub fn new(traits: [f32; N_TRAITS], caps: Caps) -> Mind {
         Mind {
+            caps,
             drives: [0.2; N_DRIVES],
             traits,
             base_traits: traits,
@@ -323,6 +367,7 @@ impl Mind {
     }
 
     pub fn model_mut(&mut self, who: u32, tick: u64, cap: usize) -> &mut Model {
+        let cap = cap.min(self.caps.models);
         if let Some(i) = self.models.iter().position(|m| m.who == who) {
             return &mut self.models[i];
         }
@@ -358,6 +403,7 @@ impl Mind {
     }
 
     pub fn remember(&mut self, ep: Episode, cap: usize) {
+        let cap = cap.min(self.caps.episodic);
         if self.episodes.len() >= cap {
             if let Some((i, _)) = self
                 .episodes
@@ -381,6 +427,7 @@ impl Mind {
 
     /// Strengthen or create a belief. Returns true if it was newly formed.
     pub fn believe(&mut self, subject: Concept, rel: Rel, delta: f32, source: Option<u32>, origin: u32, tick: u64, distorted: bool, cap: usize) -> bool {
+        let cap = cap.min(self.caps.beliefs);
         if let Some(b) = self.beliefs.iter_mut().find(|b| b.subject == subject && b.rel == rel) {
             b.conf = (b.conf + delta).clamp(0.0, 1.0);
             return false;

@@ -211,3 +211,8 @@ Status: **Accepted** (approved by you), **Proposed** (my call, awaiting review),
 **Status:** Proposed
 **Decision:** Seeing a thief punished is filed as one's own experience (not hearsay); being robbed teaches that robbing is wrong; a victim who catches a thief is interrupted and decides immediately whether to punish. Norm beliefs fade slowly.
 **Result:** an anti-theft norm takes hold in 56% of tanks (was 4–12%), with about 11 punishments per tank and no feud spiral.
+
+### D-041 · Capacity profiles (implements D-005)
+**Status:** Proposed
+**Decision:** At birth each mind gets limits and features from its `capacity` gene. Memory, belief, acquaintance and vocabulary limits scale with (capacity − 0.15)/0.70 squared, so config values are the limits of a typical sapient (0.85). Learned language and gossip switch on at 0.35; planning, teaching and experimenting at 0.55. Low-capacity minds need stronger evidence before trusting a learned rule. Kin are always remembered, so the acquaintance limit applies to non-kin.
+**Why:** Phase 2 must run animals and sapients through the same mind code at different capacities. Founders (0.78–0.95) now differ slightly in how much they can hold, which adds individual variation.

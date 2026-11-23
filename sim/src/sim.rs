@@ -337,6 +337,7 @@ impl Sim {
     pub fn make_person(&self, id: u32, g: Genome, female: bool, born: u64, culture: u16, phon: Phonology, mut rng: Rng) -> Person {
         let innovation = if rng.chance(self.cfg.language.innovator_chance) { Some(phon.random_law(&mut rng)) } else { None };
         let traits = g.traits;
+        let caps = crate::mind::Caps::from_capacity(g.capacity, &self.cfg.mind);
         Person {
             id,
             alive: true,
@@ -370,7 +371,7 @@ impl Sim {
             from: (0.0, 0.0),
             to: (0.0, 0.0),
             intent: None,
-            mind: Mind::new(traits),
+            mind: Mind::new(traits, caps),
             knowledge: Vec::new(),
             skill_forage: 0.2,
             skill_hunt: 0.1,
@@ -607,12 +608,13 @@ impl Sim {
         let mut prunes: Vec<(usize, Lexicon)> = Vec::new();
         for &id in &alive_people {
             let p = &people[id as usize];
-            if p.mind.lex.len() <= self.cfg.mind.lexicon_cap {
+            let lcap = self.cfg.mind.lexicon_cap.min(p.mind.caps.lexicon);
+            if p.mind.lex.len() <= lcap {
                 continue;
             }
             let mut lex = p.mind.lex.clone();
             let known = |q: u32| p.mind.model(q).is_some();
-            lex.prune(self.cfg.mind.lexicon_cap, is_alive, known);
+            lex.prune(lcap, is_alive, known);
             prunes.push((id as usize, lex));
         }
         for (i, lex) in prunes {
@@ -1252,7 +1254,7 @@ impl Sim {
             m.today_cues |= cues;
             let (tc, to) = (m.today_cues, m.today_out);
             m.cont.end_day(tc, to, mcfg.contingency_decay);
-            m.expect = m.cont.expect(tc, mcfg.rule_min_dp, mcfg.rule_min_n);
+            m.expect = m.cont.expect(tc, mcfg.rule_min_dp + m.caps.rule_margin(), mcfg.rule_min_n);
             m.today_cues = 0;
             m.today_out = 0;
             m.cont.told.retain(|t| t.2 > 0.3);

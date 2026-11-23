@@ -395,7 +395,7 @@ impl Sim {
             let rep = m.drives[drv::REPRO];
             cands.push(c(Act::Court { who: o }, rep * 0.7 + w * 0.4 - hunger * 0.4 - 0.15, &[(why::MATING, rep)]));
         }
-        if let Some((o, node, w)) = learner {
+        if let Some((o, node, w)) = learner.filter(|_| m.caps.culture) {
             let u = 0.15 + w * 0.6 + tr[4] * 0.2 + m.drives[drv::CARE] * 0.2 - hunger * 0.5;
             cands.push(c(Act::Teach { who: o, node }, u, &[(why::KIN, w), (why::CARE, tr[4])]));
         }
@@ -425,7 +425,7 @@ impl Sim {
         {
             let need_max = p.needs.iter().fold(0.0f32, |a, b| a.max(*b)).min(3.0) / 3.0;
             let cur = m.drives[drv::CURIOSITY];
-            if adult {
+            if adult && m.caps.culture {
                 let u = cur * 0.5 * (0.3 + tr[2]) + need_max * 0.25 - hunger * 0.8 - fear * 0.3 - 0.2;
                 cands.push(c(Act::Experiment, u, &[(why::CURIOSITY, cur * tr[2]), (why::NEED, need_max)]));
             } else {
@@ -478,7 +478,7 @@ impl Sim {
         cands.push(c(Act::Idle, 0.02, &[]));
 
         // anticipatory intent: stockpile before expected scarcity
-        let form_stockpile = exp_h > 0.45 && !stockpiling && adult && stash < 6.0;
+        let form_stockpile = exp_h > 0.45 && !stockpiling && adult && stash < 6.0 && self.people[i].mind.caps.planning;
         let avoid_sick = exp_sick > 0.4;
 
         // choose (with a habit term: practiced activities feel natural, which breeds specialists)
@@ -1449,6 +1449,18 @@ impl Sim {
 
     fn converse(&mut self, s: usize, h: usize) {
         let tick = self.tick;
+        // without language, company is still company: bonding without words or gossip
+        if !self.people[s].mind.caps.language || !self.people[h].mind.caps.language {
+            let cap = self.cfg.mind.model_cap;
+            for (a, b) in [(s, h), (h, s)] {
+                let pa = &mut self.people[a];
+                let md = pa.mind.model_mut(b as u32, tick, cap);
+                md.affinity = (md.affinity + 0.04).min(1.0);
+                md.last_seen = tick;
+                pa.mind.drives[drv::BELONGING] *= 0.5;
+            }
+            return;
+        }
         let cap = self.cfg.mind.model_cap;
         let tpc = self.tpc();
         let sid = s as u32;

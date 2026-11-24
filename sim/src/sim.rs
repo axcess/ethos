@@ -176,7 +176,11 @@ impl Sim {
         tod > self.world.climate.lamp_frac.max(0.25)
     }
     pub fn adult(&self, i: usize) -> bool {
-        self.people[i].age_cycles(self.tick, self.tpc()) >= self.cfg.people.adult_cycles
+        self.people[i].age_cycles(self.tick, self.tpc()) >= self.adult_age(i)
+    }
+    /// Adulthood comes at 8 cycles, or sooner in short-lived bodies (27% of the lifespan).
+    pub fn adult_age(&self, i: usize) -> f32 {
+        self.cfg.people.adult_cycles.min(self.people[i].genome.max_age * 0.27)
     }
     pub fn name(&self, id: u32) -> String {
         self.people.get(id as usize).map(|p| p.display_name()).unwrap_or_else(|| format!("#{id}"))
@@ -485,10 +489,27 @@ impl Sim {
             return;
         };
         let herd = evo.creatures[k].clone();
-        let n = herd.m.min(24.0).floor() as u32;
-        evo.creatures[k].m -= n as f32;
-        if evo.creatures[k].m < 1.0 {
-            evo.creatures[k].alive = false;
+        // a band gathers from this herd and nearby herds of the same species (up to 24)
+        let mut near: Vec<(f32, usize)> = evo
+            .creatures
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.alive && c.species == herd.species && c.g.capacity >= 0.3)
+            .map(|(j, c)| (((c.x - herd.x).powi(2) + (c.y - herd.y).powi(2)).sqrt(), j))
+            .filter(|(d, _)| *d < 40.0)
+            .collect();
+        near.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.cmp(&b.1)));
+        let mut n = 0u32;
+        for (_, j) in near {
+            let take = (evo.creatures[j].m.floor() as u32).min(24 - n);
+            evo.creatures[j].m -= take as f32;
+            if evo.creatures[j].m < 1.0 {
+                evo.creatures[j].alive = false;
+            }
+            n += take;
+            if n >= 24 {
+                break;
+            }
         }
         evo.mind_species.entry(herd.species).or_insert(self.tick);
         let first_ever = evo.minds_began.is_none();
@@ -500,7 +521,16 @@ impl Sim {
         let culture = 1000 + herd.species as u16;
         let mut rng = Rng::stream(self.seed, tag::WORLD, self.tick ^ 0xA11CE);
         let phon = Phonology::generate(&mut rng, herd.g.lips, herd.g.tongue, herd.g.throat);
-        let place = place_of(herd.x, herd.y);
+        // the band settles on the richest food within reach of where the herd lives (as founders do)
+        let here = place_of(herd.x, herd.y) as usize;
+        let place = self
+            .world
+            .places
+            .iter()
+            .filter(|pl| pl.passable && (pl.id as usize % PW).abs_diff(here % PW) <= 2 && (pl.id as usize / PW).abs_diff(here / PW) <= 2)
+            .max_by(|a, b| self.world.place_food(a.id).partial_cmp(&self.world.place_food(b.id)).unwrap().then(b.id.cmp(&a.id)))
+            .map(|pl| pl.id)
+            .unwrap_or(here as u8);
         let camp = self.new_camp(place, u32::MAX, culture);
         let first = self.people.len() as u32;
         for _ in 0..n {
@@ -508,7 +538,9 @@ impl Sim {
             let mut prng = Rng::stream(self.seed, tag::PERSON, id as u64);
             let g = herd.g.mutant(&mut prng, 0.3, 0.03);
             let female = prng.chance(0.5);
-            let age = prng.range(0.5, (g.max_age * 0.5).max(1.0));
+            // mostly grown animals, some young (as in the founding bands)
+            let adult_c = self.cfg.people.adult_cycles.min(g.max_age * 0.27);
+            let age = if prng.chance(0.25) { prng.range(1.0, adult_c) } else { prng.range(adult_c, (g.max_age * 0.6).max(adult_c + 1.0)) };
             let born = self.tick.saturating_sub((age * tpc as f32) as u64);
             let mut p = self.make_person(id, g, female, born, culture, phon.clone(), prng);
             p.species = herd.species;
@@ -516,8 +548,8 @@ impl Sim {
             let (cx, cy) = (self.world.camps[camp as usize].x, self.world.camps[camp as usize].y);
             p.from = (cx + p.rng.range(-6.0, 6.0), cy + p.rng.range(-6.0, 6.0));
             p.to = p.from;
-            p.energy = herd.energy.max(0.5);
-            p.stash = 1.0;
+            p.energy = herd.energy.max(0.75);
+            p.stash = 3.0;
             p.name = loop {
                 let w = phon.coin(&mut p.rng);
                 if w.len() >= 3 {
@@ -536,6 +568,50 @@ impl Sim {
         }
         let last = self.people.len() as u32;
         self.world.camps[camp as usize].founder = first;
+        // herd animals already have partners: pair bonds among adults
+        let adults: Vec<u32> = (first..last).filter(|&i| self.adult(i as usize)).collect();
+        let mut pairs = Vec::new();
+        let mut free_f: Vec<u32> = adults.iter().copied().filter(|&i| self.people[i as usize].female).collect();
+        let mut free_m: Vec<u32> = adults.iter().copied().filter(|&i| !self.people[i as usize].female).collect();
+        while !free_f.is_empty() && !free_m.is_empty() && rng.chance(0.75) {
+            let f = free_f.remove(rng.below(free_f.len() as u32) as usize);
+            let m = free_m.remove(rng.below(free_m.len() as u32) as usize);
+            self.people[f as usize].mate = Some(m);
+            self.people[m as usize].mate = Some(f);
+            pairs.push((f, m));
+        }
+        // the young follow an adult pair as their parents
+        let young: Vec<u32> = (first..last).filter(|&i| !self.adult(i as usize)).collect();
+        for &c in &young {
+            if pairs.is_empty() {
+                break;
+            }
+            let (f, m) = pairs[rng.below(pairs.len() as u32) as usize];
+            self.people[c as usize].mother = Some(f);
+            self.people[c as usize].father = Some(m);
+            self.people[f as usize].children.push(c);
+            self.people[m as usize].children.push(c);
+        }
+        // the herd's range is remembered: where food was found within a few places of home
+        let hx = place as usize % PW;
+        let hy = place as usize / PW;
+        let known: Vec<(usize, f32)> = self
+            .world
+            .places
+            .iter()
+            .filter(|pl| pl.passable && (pl.id as usize % PW).abs_diff(hx) <= 3 && (pl.id as usize / PW).abs_diff(hy) <= 3)
+            .map(|pl| (pl.id as usize, (self.world.place_food(pl.id) / 160.0).min(1.0)))
+            .collect();
+        for a in first..last {
+            let p = &mut self.people[a as usize];
+            for &(k, f) in &known {
+                if p.rng.chance(0.7) {
+                    let pm = &mut p.mind.places[k];
+                    pm.food = f;
+                    pm.conf = 0.5;
+                }
+            }
+        }
         // a herd knows its members
         let tick = self.tick;
         let cap = self.cfg.mind.model_cap;
@@ -1258,7 +1334,7 @@ impl Sim {
             }
             self.update_energy(i);
             let age = self.people[i].age_cycles(tick, tpc);
-            let adult = age >= pc.adult_cycles;
+            let adult = age >= self.adult_age(i);
             // mortality: age
             let max_age = self.people[i].genome.max_age;
             if age > max_age && self.people[i].rng.chance(0.05) || age > max_age * 0.85 && self.people[i].rng.chance(0.004) {
@@ -1521,9 +1597,10 @@ impl Sim {
         let tpd = self.tpd() as f32;
         let hunger = self.cfg.people.hunger_per_day;
         let tick = self.tick;
+        let adult_at = self.adult_age(i);
         let p = &mut self.people[i];
         let dt = tick.saturating_sub(p.last_upd) as f32 / tpd;
-        let child = if (tick - p.born) < (self.cfg.people.adult_cycles * self.cfg.time.ticks_per_cycle() as f32) as u64 { 0.7 } else { 1.0 };
+        let child = if (tick - p.born) < (adult_at * self.cfg.time.ticks_per_cycle() as f32) as u64 { 0.7 } else { 1.0 };
         let burn = hunger * dt * (0.8 + 0.4 * p.genome.size) * (1.2 - 0.4 * p.genome.efficiency) * child;
         p.energy = (p.energy - burn).max(0.0);
         if p.act != Act::Sleep {

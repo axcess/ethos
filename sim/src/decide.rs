@@ -78,7 +78,7 @@ impl Sim {
         let tick = self.tick;
         let tpc = self.tpc();
         let age = self.people[i].age_cycles(tick, tpc);
-        let adult = age >= self.cfg.people.adult_cycles;
+        let adult = age >= self.adult_age(i);
         let (x, y) = self.people[i].pos(tick);
         let place = place_of(x, y);
 
@@ -1397,7 +1397,7 @@ impl Sim {
     pub fn talk(&mut self, s: usize, h: usize, topic: Concept) -> bool {
         let lc = self.cfg.language.clone();
         let tpc = self.tpc();
-        let h_child = self.people[h].age_cycles(self.tick, tpc) < self.cfg.people.adult_cycles;
+        let h_child = self.people[h].age_cycles(self.tick, tpc) < self.adult_age(h);
         let (sp, hp) = pair_mut(&mut self.people, s, h);
         let form = match sp.mind.lex.best(&topic) {
             Some(f) => f.clone(),
@@ -1516,7 +1516,7 @@ impl Sim {
             md2.trust = md2.trust.max(0.25);
         }
         // children learn many words at once
-        let h_child = self.people[h].age_cycles(tick, tpc) < self.cfg.people.adult_cycles;
+        let h_child = self.people[h].age_cycles(tick, tpc) < self.adult_age(h);
         let rounds = if h_child { 4 } else { 1 };
         for _ in 0..rounds {
             let topic = {

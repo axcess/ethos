@@ -454,7 +454,7 @@ impl Sim {
             if let Some(hc) = p.home {
                 let camp = &self.world.camps[hc as usize];
                 let pmats = self.world.places[camp.place as usize].mats;
-                for &node in &[n::CACHE, n::BURROW, n::HALL, n::WALL, n::GARDEN, n::SHELL_BED] {
+                for &node in &[n::CACHE, n::BURROW, n::HALL, n::WALL, n::GARDEN, n::SHELL_BED].iter().filter(|_| p.genome.grip >= 0.5).copied().collect::<Vec<u8>>() {
                     if !p.knows(node) {
                         continue;
                     }
@@ -2003,7 +2003,9 @@ impl Sim {
         }
         let mut options: Vec<(u8, u16, f32)> = Vec::new();
         for d in NODES.iter() {
-            if p.knows(d.id) || d.min_group as u32 > group || !d.prereq.iter().all(|q| p.knows(*q)) {
+            // without grasping appendages, no tools or structures (practices and beliefs are still possible)
+            let needs_hands = matches!(d.kind, crate::discovery::NodeKind::Tool | crate::discovery::NodeKind::Structure);
+            if p.knows(d.id) || d.min_group as u32 > group || !d.prereq.iter().all(|q| p.knows(*q)) || (needs_hands && p.genome.grip < 0.5) {
                 continue;
             }
             let avail: Vec<u16> = d

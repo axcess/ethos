@@ -188,6 +188,8 @@ pub struct Evo {
     pub animal_species: Vec<crate::fauna::AnimalSpecies>,
     pub next_creature: u32,
     pub animals_began: Option<u64>,
+    #[serde(default)]
+    pub minds_began: Option<u64>,
     pub fauna_events: Vec<(u64, crate::fauna::FaunaEvent)>,
     pub first_hunter_seen: bool,
     pub cleverest_mark: f32,

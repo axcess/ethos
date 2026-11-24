@@ -293,7 +293,10 @@ pub fn era_label(sim: &Sim) -> String {
         None => "people".into(),
         Some(e) => {
             if !sim.alive.is_empty() {
-                "minds".into()
+                let mut caps: Vec<f32> = sim.alive.iter().map(|&i| sim.people[i as usize].genome.capacity).collect();
+                caps.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                let med = caps[caps.len() / 2];
+                if med >= 0.75 { "sapient".into() } else if med >= 0.55 { "cultural".into() } else { "social".into() }
             } else if !e.creatures.is_empty() {
                 "biological".into()
             } else if e.live_strains() == 0 {

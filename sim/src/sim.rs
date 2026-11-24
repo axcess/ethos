@@ -423,6 +423,7 @@ impl Sim {
             founded_camps: 0,
             prestige: 0.0,
             consider_move_day: 0,
+            species: 0,
         }
     }
 
@@ -455,17 +456,108 @@ impl Sim {
 
     // ---------------------------------------------------------------- events & logs
 
-    fn fauna_substeps(&mut self, n: u32) {
+    fn fauna_substeps(&mut self, n: u32, dt: f32) {
         let Some(mut evo) = self.evo.take() else { return };
         if !evo.creatures.is_empty() {
             let fcfg = self.cfg.fauna.clone();
             let mut fr = evo.frng.take().unwrap_or_else(|| Rng::new(2));
             for _ in 0..n {
-                evo.fauna_step(&mut self.world, &fcfg, self.tick, 1.0 / n as f32, &mut fr);
+                evo.fauna_step(&mut self.world, &fcfg, self.tick, dt, &mut fr);
             }
             evo.frng = Some(fr);
         }
         self.evo = Some(evo);
+    }
+
+    /// A herd whose genes reach capacity 0.35 becomes a band of individuals with full minds
+    /// (DESIGN §5.4–5.5): the same Mind code as "start with people" tanks, limited by their genes.
+    fn promote_minds(&mut self) {
+        let Some(mut evo) = self.evo.take() else { return };
+        let Some(k) = evo
+            .creatures
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.alive && c.g.capacity >= 0.35 && c.m >= 4.0)
+            .max_by(|a, b| a.1.g.capacity.partial_cmp(&b.1.g.capacity).unwrap().then(b.0.cmp(&a.0)))
+            .map(|(k, _)| k)
+        else {
+            self.evo = Some(evo);
+            return;
+        };
+        let herd = evo.creatures[k].clone();
+        let n = herd.m.min(24.0).floor() as u32;
+        evo.creatures[k].m -= n as f32;
+        if evo.creatures[k].m < 1.0 {
+            evo.creatures[k].alive = false;
+        }
+        let first_ever = evo.minds_began.is_none();
+        if first_ever {
+            evo.minds_began = Some(self.tick);
+        }
+        self.evo = Some(evo);
+        let tpc = self.tpc();
+        let culture = 1000 + herd.species as u16;
+        let mut rng = Rng::stream(self.seed, tag::WORLD, self.tick ^ 0xA11CE);
+        let phon = Phonology::generate(&mut rng, herd.g.lips, herd.g.tongue, herd.g.throat);
+        let place = place_of(herd.x, herd.y);
+        let camp = self.new_camp(place, u32::MAX, culture);
+        let first = self.people.len() as u32;
+        for _ in 0..n {
+            let id = self.people.len() as u32;
+            let mut prng = Rng::stream(self.seed, tag::PERSON, id as u64);
+            let g = herd.g.mutant(&mut prng, 0.3, 0.03);
+            let female = prng.chance(0.5);
+            let age = prng.range(0.5, (g.max_age * 0.5).max(1.0));
+            let born = self.tick.saturating_sub((age * tpc as f32) as u64);
+            let mut p = self.make_person(id, g, female, born, culture, phon.clone(), prng);
+            p.species = herd.species;
+            p.home = Some(camp);
+            let (cx, cy) = (self.world.camps[camp as usize].x, self.world.camps[camp as usize].y);
+            p.from = (cx + p.rng.range(-6.0, 6.0), cy + p.rng.range(-6.0, 6.0));
+            p.to = p.from;
+            p.energy = herd.energy.max(0.5);
+            p.stash = 1.0;
+            p.name = loop {
+                let w = phon.coin(&mut p.rng);
+                if w.len() >= 3 {
+                    break w;
+                }
+            };
+            p.name_gloss = format!("of species A{}", herd.species);
+            let own = p.name.clone();
+            p.mind.lex.adopt(Concept::Person(id), own, 0.9);
+            p.next_decision = self.tick + p.rng.below(64) as u64;
+            p.act_start = self.tick;
+            p.last_upd = self.tick;
+            p.life_note(self.tick, format!("among the first of species A{} to think as an individual", herd.species));
+            self.people.push(p);
+            self.alive.push(id);
+        }
+        let last = self.people.len() as u32;
+        self.world.camps[camp as usize].founder = first;
+        // a herd knows its members
+        let tick = self.tick;
+        let cap = self.cfg.mind.model_cap;
+        for a in first..last {
+            for b in first..last {
+                if a != b {
+                    let pa = &mut self.people[a as usize];
+                    let m = pa.mind.model_mut(b, tick, cap);
+                    m.affinity = pa.rng.range(0.1, 0.4);
+                    m.trust = 0.5;
+                }
+            }
+        }
+        if self.tracked.len() < 24 {
+            self.tracked.extend(first..last.min(first + 6));
+        }
+        let cname = self.camp_name(camp);
+        let text = if first_ever {
+            format!("The first minds: {n} animals of species A{} begin to think as individuals, at {cname} in the {}", herd.species, self.place_name(place))
+        } else {
+            format!("Another band of thinking animals ({n}, species A{}) gathers at {cname}", herd.species)
+        };
+        self.emit(EvKind::EvolutionaryFirst, (first..last).take(4).collect(), place, text);
     }
 
     fn emit_fauna(&mut self, _t: u64, e: crate::fauna::FaunaEvent) {
@@ -550,7 +642,7 @@ impl Sim {
     pub fn step(&mut self) {
         // deep time: with no people, the world advances a day at a time (animals in 4 sub-steps)
         if self.evo.is_some() && self.alive.is_empty() {
-            self.fauna_substeps(4);
+            self.fauna_substeps(4, 0.25);
             let next_day = (self.tick / self.tpd() + 1) * self.tpd();
             self.tick = next_day;
             self.new_day();
@@ -558,6 +650,10 @@ impl Sim {
         }
         let step = self.cfg.time.step_ticks;
         let before_day = self.tick / self.tpd();
+        // animals keep living alongside minds: a quarter-day sub-step every 256 ticks
+        if self.evo.is_some() && (self.tick % 256) < step {
+            self.fauna_substeps(1, 0.25);
+        }
         self.tick += step;
         if self.tick / self.tpd() != before_day {
             self.new_day();
@@ -661,6 +757,7 @@ impl Sim {
             let fcfg = self.cfg.fauna.clone();
             let mut fr = evo.frng.take().unwrap_or_else(|| Rng::new(2));
             evo.animal_origins(&fcfg, self.tick, &mut fr);
+            let promote = evo.creatures.iter().any(|c| c.g.capacity >= 0.35 && c.m >= 4.0) && fr.chance(0.05) && self.alive.len() < 400;
             if day % 12 == 6 {
                 evo.fauna_species(&fcfg, self.tick);
             }
@@ -672,6 +769,9 @@ impl Sim {
                 self.emit_evo(t, e);
             }
             self.evo = Some(evo);
+            if promote {
+                self.promote_minds();
+            }
         }
         self.world.update_foul(&self.cfg.world);
         self.world.daily(&self.cfg.world);

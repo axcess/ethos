@@ -154,6 +154,9 @@ pub struct Person {
     /// Standing as experienced by this mind: others accepting, following and learning from it.
     pub prestige: f32,
     pub consider_move_day: u64,
+    /// Animal species this mind descends from (evolution mode); 0 in "start with people" tanks.
+    #[serde(default)]
+    pub species: u32,
 }
 
 impl Person {

@@ -53,6 +53,12 @@ pub struct Creature {
     pub m: f32,
     pub alive: bool,
     pub mem: Option<(f32, f32)>,
+    /// best feeding spot remembered for each season: (x, y, quality)
+    #[serde(default)]
+    pub seasons: [(f32, f32, f32); 4],
+    /// where a predator was last met
+    #[serde(default)]
+    pub danger: Option<(f32, f32)>,
     pub born: u64,
     pub gen: u32,
 }
@@ -137,7 +143,7 @@ impl Evo {
         let species = self.new_animal_species(&g, None, tick);
         let id = self.next_creature;
         self.next_creature += 1;
-        self.creatures.push(Creature { id, species, g, x, y, energy: 0.6, age_days: 30.0, m: (b * 0.5).max(4.0), alive: true, mem: None, born: tick, gen: 0 });
+        self.creatures.push(Creature { id, species, g, x, y, energy: 0.6, age_days: 30.0, m: (b * 0.5).max(4.0), alive: true, mem: None, seasons: [(0.0, 0.0, 0.0); 4], danger: None, born: tick, gen: 0 });
         // the founding population is taken from the strain
         for k in [MID, BOTTOM] {
             for e in self.pop[cell * LAYERS + k].iter_mut() {
@@ -242,8 +248,12 @@ impl Evo {
             let burn = 0.22 * dt * (0.6 + c.g.size) * (0.8 + 0.4 * c.g.speed) * (1.0 + cfg.capacity_cost * cap) + 0.03 * dt * c.g.armor;
             c.energy -= burn;
             c.age_days += dt;
+            let season = ((tick / 1024) % 48 / 12) as usize;
             // decide: flee, hunt, graze-move, school
             if let Some((tx, ty, d)) = threat {
+                if cap > 0.15 {
+                    c.danger = Some((tx, ty));
+                }
                 // anticipation: clever animals start fleeing earlier and choose better escape lines
                 let (ex, ey) = (c.x - tx, c.y - ty);
                 let l = (ex * ex + ey * ey).sqrt().max(1.0);
@@ -251,7 +261,7 @@ impl Evo {
                 c.x += ex / l * step * boost;
                 c.y += ey / l * step * boost;
                 let _ = d;
-            } else if let (Some((p, _)), true) = (prey, c.energy < 0.8 && r.chance(0.3 + 0.7 * c.g.diet)) {
+            } else if let (Some((p, _)), true) = (prey, c.energy < 0.95 && r.chance(0.3 + 0.7 * c.g.diet)) {
                 let pc = &self.creatures[p];
                 let (px, py) = (pc.x, pc.y);
                 let d = dist(c.x, c.y, px, py);
@@ -271,7 +281,12 @@ impl Evo {
             } else {
                 // graze: even brainless animals follow the food gradient to neighbouring cells;
                 // cleverer ones also weigh spots further off, and remember good places
-                let here = self.food_at(world, c.x, c.y, &c.g);
+                // clever animals shun the place they last met a predator
+                let wary = |x: f32, y: f32, f: f32| match c.danger {
+                    Some((dx, dy)) if dist(x, y, dx, dy) < 25.0 => f * 0.3,
+                    _ => f,
+                };
+                let here = wary(c.x, c.y, self.food_at(world, c.x, c.y, &c.g));
                 let mut best = (c.x, c.y, here);
                 let reach = (CELL * 1.2).max(step);
                 for (dx, dy) in [(1.0f32, 0.0f32), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)] {
@@ -279,7 +294,7 @@ impl Evo {
                         continue;
                     }
                     let (ox, oy) = ((c.x + dx * reach).clamp(2.0, TANK_W - 2.0), (c.y + dy * reach).clamp(2.0, TANK_H - 2.0));
-                    let f = self.food_at(world, ox, oy, &c.g);
+                    let f = wary(ox, oy, self.food_at(world, ox, oy, &c.g));
                     if f > best.2 {
                         best = (ox, oy, f);
                     }
@@ -293,7 +308,7 @@ impl Evo {
                 }
                 for _ in 0..options {
                     let (ox, oy) = ((c.x + r.range(-range, range)).clamp(2.0, TANK_W - 2.0), (c.y + r.range(-range, range)).clamp(2.0, TANK_H - 2.0));
-                    let f = self.food_at(world, ox, oy, &c.g);
+                    let f = wary(ox, oy, self.food_at(world, ox, oy, &c.g));
                     if f > best.2 {
                         best = (ox, oy, f);
                     }
@@ -307,6 +322,16 @@ impl Evo {
                         }
                     }
                 }
+                // seasonal memory: when food is poor, head for the spot that was best in this season
+                let mut travelling = false;
+                let (sx0, sy0, sq) = c.seasons[season];
+                if cap > 0.2 && sq > best.2 * 1.3 && r.chance(((cap - 0.2) * 2.5).min(1.0)) {
+                    let d = dist(c.x, c.y, sx0, sy0).max(0.1);
+                    let mv = (step * 1.5).min(d);
+                    best = (c.x + (sx0 - c.x) / d * mv, c.y + (sy0 - c.y) / d * mv, sq);
+                    travelling = true;
+                }
+                let _ = travelling;
                 // social animals stay with their school
                 if c.g.sociality > 0.4 && kin_n > 0.0 {
                     let (sx, sy) = (kin_cx / kin_n, kin_cy / kin_n);
@@ -320,6 +345,14 @@ impl Evo {
                 c.energy = (c.energy + eaten).min(1.0);
                 if cap > 0.1 && best.2 > 2.0 {
                     c.mem = Some((c.x, c.y));
+                }
+                if cap > 0.2 {
+                    let q = self.food_at(world, c.x, c.y, &c.g);
+                    let slot = &mut c.seasons[season];
+                    slot.2 *= 0.995;
+                    if q > slot.2 {
+                        *slot = (c.x, c.y, q);
+                    }
                 }
             }
             if world.cells[cell_of(c.x, c.y)].hab == crate::world::Habitat::Rock {
@@ -335,7 +368,7 @@ impl Evo {
             }
             let pack = self.creatures[hunter].m;
             let taken = (pack * 0.25).max(1.0).min(self.creatures[victim].m);
-            let food = taken * (self.creatures[victim].g.size * 2.0 + 0.4);
+            let food = taken * (self.creatures[victim].g.size * 4.0 + 0.5);
             self.fauna_tally[3] += taken;
             let v = &mut self.creatures[victim];
             v.m -= taken;
@@ -359,14 +392,15 @@ impl Evo {
                 eff * self.pop[i * LAYERS + kk].iter().map(|e| e.1).sum::<f32>()
             })
             .sum();
-        (1.0 - g.diet) * (c.algae + c.shell + mats) / (1.0 + 0.3 * self.crowd.get(i).copied().unwrap_or(0.0))
+        (1.0 - g.diet * g.diet) * (c.algae + c.shell + mats) / (1.0 + 0.3 * self.crowd.get(i).copied().unwrap_or(0.0))
     }
 
     /// A group of `m` animals feeds here; returns energy gained per animal.
     /// A herd of `m` animals feeds across the cells it spreads over (bigger herds range wider);
     /// returns energy gained per animal.
     fn eat_at(&mut self, world: &mut World, x: f32, y: f32, g: &Genome, dt: f32, m: f32) -> f32 {
-        let per = (0.4 + g.size) * dt * (1.0 - g.diet) * 2.0;
+        // a little taste for meat costs little grazing; a true hunter grazes poorly
+        let per = (0.4 + g.size) * dt * (1.0 - g.diet * g.diet) * 2.0;
         let mut need = per * m;
         let mut got = 0.0f32;
         let (cx, cy) = (((x / CELL) as isize).clamp(0, W as isize - 1), ((y / CELL) as isize).clamp(0, H as isize - 1));
@@ -461,7 +495,7 @@ impl Evo {
                     let g = c.g.mutant(r, cfg.mutation_rate, cfg.mutation_size);
                     let m = (young * 4.0).max(2.0).min(c.m * 0.5);
                     c.m -= m - young;
-                    newborn.push(Creature { id: 0, species: c.species, g, x: c.x + r.range(-6.0, 6.0), y: c.y + r.range(-6.0, 6.0), energy: 0.5, age_days: 0.0, m, alive: true, mem: None, born: tick, gen: c.gen + 1 });
+                    newborn.push(Creature { id: 0, species: c.species, g, x: c.x + r.range(-6.0, 6.0), y: c.y + r.range(-6.0, 6.0), energy: 0.5, age_days: 0.0, m, alive: true, mem: None, seasons: [(0.0, 0.0, 0.0); 4], danger: None, born: tick, gen: c.gen + 1 });
                 } else {
                     c.m += young;
                 }
@@ -471,7 +505,7 @@ impl Evo {
                 c.m -= half;
                 let g = if r.chance(0.5) { c.g.mutant(r, cfg.mutation_rate, cfg.mutation_size) } else { c.g.clone() };
                 let ang = r.range(0.0, 6.283);
-                newborn.push(Creature { id: 0, species: c.species, g, x: (c.x + 20.0 * libm::cosf(ang)).clamp(2.0, TANK_W - 2.0), y: (c.y + 20.0 * libm::sinf(ang)).clamp(2.0, TANK_H - 2.0), energy: c.energy, age_days: c.age_days, m: half, alive: true, mem: c.mem, born: tick, gen: c.gen + 1 });
+                newborn.push(Creature { id: 0, species: c.species, g, x: (c.x + 20.0 * libm::cosf(ang)).clamp(2.0, TANK_W - 2.0), y: (c.y + 20.0 * libm::sinf(ang)).clamp(2.0, TANK_H - 2.0), energy: c.energy, age_days: c.age_days, m: half, alive: true, mem: c.mem, seasons: c.seasons, danger: c.danger, born: tick, gen: c.gen + 1 });
             }
             c.m = c.m.min(400.0);
         }

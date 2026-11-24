@@ -477,7 +477,7 @@ impl Sim {
             .creatures
             .iter()
             .enumerate()
-            .filter(|(_, c)| c.alive && c.g.capacity >= 0.35 && c.m >= 4.0)
+            .filter(|(_, c)| evo.can_promote(c, self.tick, self.tpc()))
             .max_by(|a, b| a.1.g.capacity.partial_cmp(&b.1.g.capacity).unwrap().then(b.0.cmp(&a.0)))
             .map(|(k, _)| k)
         else {
@@ -490,6 +490,7 @@ impl Sim {
         if evo.creatures[k].m < 1.0 {
             evo.creatures[k].alive = false;
         }
+        evo.mind_species.entry(herd.species).or_insert(self.tick);
         let first_ever = evo.minds_began.is_none();
         if first_ever {
             evo.minds_began = Some(self.tick);
@@ -757,7 +758,7 @@ impl Sim {
             let fcfg = self.cfg.fauna.clone();
             let mut fr = evo.frng.take().unwrap_or_else(|| Rng::new(2));
             evo.animal_origins(&fcfg, self.tick, &mut fr);
-            let promote = evo.creatures.iter().any(|c| c.g.capacity >= 0.35 && c.m >= 4.0) && fr.chance(0.05) && self.alive.len() < 400;
+            let promote = evo.creatures.iter().any(|c| evo.can_promote(c, self.tick, self.tpc())) && fr.chance(0.05) && self.alive.len() < 400;
             if day % 12 == 6 {
                 evo.fauna_species(&fcfg, self.tick);
             }

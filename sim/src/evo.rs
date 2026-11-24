@@ -190,6 +190,9 @@ pub struct Evo {
     pub animals_began: Option<u64>,
     #[serde(default)]
     pub minds_began: Option<u64>,
+    /// Species that crossed into minds, and when (each gets a founding window, then must sustain itself).
+    #[serde(default)]
+    pub mind_species: std::collections::BTreeMap<u32, u64>,
     pub fauna_events: Vec<(u64, crate::fauna::FaunaEvent)>,
     pub first_hunter_seen: bool,
     pub cleverest_mark: f32,
@@ -209,6 +212,15 @@ fn temp_c(x: f32) -> f32 {
 }
 
 impl Evo {
+    /// A herd may cross into minds if its genes allow it and its species is new to minds
+    /// or still inside its founding window (two cycles). After that, minds must sustain themselves.
+    pub fn can_promote(&self, c: &crate::fauna::Creature, now: u64, tpc: u64) -> bool {
+        c.alive
+            && c.g.capacity >= 0.35
+            && c.m >= 4.0
+            && self.mind_species.get(&c.species).map_or(true, |&t0| now < t0 + 2 * tpc)
+    }
+
     pub fn new(seed: u64) -> Evo {
         let n = W * H;
         Evo {
